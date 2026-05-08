@@ -344,6 +344,21 @@ tr:hover td{background:rgba(255,255,255,.015)}
       </p>
     </div>
 
+    <!-- UPDATE PASSWORD -->
+    <form class="auth-form" id="f-update" onsubmit="doUpdatePassword(event)">
+      <p class="hint" style="margin-bottom:1rem">Choose a new password for your account.</p>
+      <div class="fld"><label class="lbl">New Password</label>
+        <input type="password" id="u-pass" class="inp" placeholder="At least 6 characters" minlength="6" required></div>
+      <div class="fld"><label class="lbl">Confirm Password</label>
+        <input type="password" id="u-pass2" class="inp" placeholder="Re-enter password" minlength="6" required></div>
+      <div id="u-err" class="err-msg"></div>
+      <div id="u-ok"  class="ok-msg"></div>
+      <button type="submit" class="btn btn-primary btn-full" id="u-btn">Update Password</button>
+      <p class="hint" style="text-align:center;margin-top:1rem">
+        <a href="#" onclick="authTab('login');return false" style="color:var(--amber)">← Back to sign in</a>
+      </p>
+    </form>
+
     <!-- SIGNUP -->
     <form class="auth-form" id="f-signup" onsubmit="doSignup(event)">
       <div class="fld"><label class="lbl">Full Name</label>
@@ -654,11 +669,24 @@ const S = {
    INIT
    ═══════════════════════════════════════════════ */
 async function init() {
+  const recoveryInUrl = isRecoveryLink();
+  if (recoveryInUrl) showPasswordUpdateForm();
+
   const { data: { session } } = await sb.auth.getSession();
-  if (session) await onLogin(session.user);
+  if (session && !recoveryInUrl) await onLogin(session.user);
 
   sb.auth.onAuthStateChange(async (ev, sess) => {
-    if (ev === 'SIGNED_IN'  && sess) await onLogin(sess.user);
+    if (ev === 'PASSWORD_RECOVERY') {
+      showPasswordUpdateForm();
+      return;
+    }
+    if (ev === 'SIGNED_IN' && sess) {
+      if (isRecoveryLink()) {
+        showPasswordUpdateForm();
+        return;
+      }
+      await onLogin(sess.user);
+    }
     if (ev === 'SIGNED_OUT')         onLogout();
   });
 
@@ -681,6 +709,28 @@ function authTab(t) {
   document.getElementById('f-login').classList.toggle('on',  t==='login');
   document.getElementById('f-signup').classList.toggle('on', t==='signup');
   document.getElementById('f-reset').classList.toggle('on',  t==='reset');
+  document.getElementById('f-update').classList.toggle('on', t==='update');
+}
+
+function isRecoveryLink() {
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  const qp = new URLSearchParams(hash);
+  return qp.get('type') === 'recovery' || qp.has('access_token');
+}
+
+function clearAuthHashParams() {
+  if (!window.location.hash) return;
+  const hash = window.location.hash.slice(1);
+  if (!hash.includes('access_token') && !hash.includes('type=')) return;
+  const cleanUrl = window.location.pathname + window.location.search;
+  window.history.replaceState({}, document.title, cleanUrl);
+}
+
+function showPasswordUpdateForm() {
+  document.getElementById('auth-wrap').style.display = 'flex';
+  document.getElementById('app-wrap').classList.remove('on');
+  document.getElementById('nav-admin').classList.add('hidden');
+  authTab('update');
 }
 
 function roleChange() {
@@ -763,6 +813,32 @@ async function doResetPassword() {
 
   if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
   okEl.textContent = '✓ Check your inbox for a reset link!'; okEl.classList.add('on');
+}
+
+async function doUpdatePassword(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('u-err');
+  const okEl  = document.getElementById('u-ok');
+  const btn   = document.getElementById('u-btn');
+  errEl.classList.remove('on'); okEl.classList.remove('on');
+
+  const pass1 = document.getElementById('u-pass').value;
+  const pass2 = document.getElementById('u-pass2').value;
+
+  if (pass1.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.classList.add('on'); return; }
+  if (pass1 !== pass2) { errEl.textContent = 'Passwords do not match.'; errEl.classList.add('on'); return; }
+
+  btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Updating…';
+  const { error } = await sb.auth.updateUser({ password: pass1 });
+  btn.disabled = false; btn.textContent = 'Update Password';
+
+  if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
+
+  okEl.textContent = '✓ Password updated. Please sign in with your new password.';
+  okEl.classList.add('on');
+  clearAuthHashParams();
+  await sb.auth.signOut();
+  authTab('login');
 }
 
 async function doLogin(e) {
