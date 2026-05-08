@@ -619,6 +619,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
    ═══════════════════════════════════════════════ */
 const SB_URL  = 'https://ikpzxtngjtsuvcljfxsu.supabase.co';
 const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlrcHp4dG5nanRzdXZjbGpmeHN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMjc3MTIsImV4cCI6MjA5MzgwMzcxMn0.wakgUkE2sebk1mb4DJ5Zba5T2u3q6kDhldtE8bBTa8U';
+const EMAIL_REDIRECT_TO = 'https://lsudigitalart.github.io/time-clock/';
 
 /* ─── Supabase client ─────────────────────────── */
 const sb = supabase.createClient(SB_URL, SB_KEY);
@@ -708,7 +709,14 @@ async function doSignup(e) {
     ...(role === 'admin' && { workplace_name: document.getElementById('s-wp-name').value.trim() }),
   };
 
-  const { data, error } = await sb.auth.signUp({ email, password: pass, options: { data: meta } });
+  const { data, error } = await sb.auth.signUp({
+    email,
+    password: pass,
+    options: {
+      data: meta,
+      emailRedirectTo: EMAIL_REDIRECT_TO,
+    },
+  });
   btn.disabled = false; btn.textContent = 'Create Account';
 
   if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
