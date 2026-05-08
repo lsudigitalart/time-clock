@@ -1599,45 +1599,57 @@ async function syncToSheets(type) {
   if (!url) { toast('Save a Google Apps Script URL first', 'er'); return; }
 
   const statusEl = document.getElementById('sheets-status');
-  statusEl.textContent = `Fetching ${type === 'time_entries' ? 'time entries' : 'time off requests'}…`;
+  statusEl.textContent = `Building employee name map…`;
 
+  // Fetch all workplace members for name mapping
+  const { data: members, error: membersErr } = await sb.from('workplace_members')
+    .select('user_id, profile:profiles(full_name)')
+    .eq('workplace_id', S.workplace.id);
+  if (membersErr) { toast(membersErr.message, 'er'); statusEl.textContent = ''; return; }
+  
+  const nameMap = {};
+  (members || []).forEach(m => {
+    nameMap[m.user_id] = m.profile?.full_name || m.user_id;
+  });
+
+  statusEl.textContent = `Fetching ${type === 'time_entries' ? 'time entries' : 'time off requests'}…`;
   let rows = [];
   if (type === 'time_entries') {
     const { data, error } = await sb
       .from('time_entries')
-      .select('id, user_id, profile:profiles(full_name), workplace_id, clock_in, clock_out, notes, created_at')
+      .select('id, user_id, clock_in, clock_out, notes')
       .eq('workplace_id', S.workplace.id)
       .order('clock_in', { ascending: false });
     if (error) { toast(error.message, 'er'); statusEl.textContent = ''; return; }
     rows = (data || []).map(r => ({
-      id:          r.id,
-      employee:    r.profile?.full_name || r.user_id,
-      clock_in:    r.clock_in  ? new Date(r.clock_in).toLocaleString()  : '',
-      clock_out:   r.clock_out ? new Date(r.clock_out).toLocaleString() : '',
-      hours:       r.clock_in && r.clock_out
-                     ? ((new Date(r.clock_out) - new Date(r.clock_in)) / 3600000).toFixed(2)
-                     : '',
-      notes:       r.notes || '',
+      id:       r.id,
+      employee: nameMap[r.user_id] || r.user_id,
+      clock_in: r.clock_in  ? new Date(r.clock_in).toLocaleString()  : '',
+      clock_out: r.clock_out ? new Date(r.clock_out).toLocaleString() : '',
+      hours:    r.clock_in && r.clock_out
+                  ? ((new Date(r.clock_out) - new Date(r.clock_in)) / 3600000).toFixed(2)
+                  : '',
+      notes:    r.notes || '',
     }));
   } else {
     const { data, error } = await sb
       .from('time_off_requests')
-      .select('id, user_id, profile:profiles(full_name), start_date, end_date, reason, notes, status, created_at')
+      .select('id, user_id, start_date, end_date, reason, notes, status, created_at')
       .eq('workplace_id', S.workplace.id)
       .order('created_at', { ascending: false });
     if (error) { toast(error.message, 'er'); statusEl.textContent = ''; return; }
     rows = (data || []).map(r => ({
-      id:         r.id,
-      employee:   r.profile?.full_name || r.user_id,
+      id:       r.id,
+      employee: nameMap[r.user_id] || r.user_id,
       start_date: r.start_date || '',
-      end_date:   r.end_date   || '',
-      days:       r.start_date && r.end_date
-                    ? Math.round((new Date(r.end_date+'T12:00') - new Date(r.start_date+'T12:00')) / 86400000) + 1
-                    : 1,
-      reason:     r.reason || '',
-      notes:      r.notes  || '',
-      status:     r.status,
-      requested:  new Date(r.created_at).toLocaleString(),
+      end_date: r.end_date   || '',
+      days:     r.start_date && r.end_date
+                  ? Math.round((new Date(r.end_date+'T12:00') - new Date(r.start_date+'T12:00')) / 86400000) + 1
+                  : 1,
+      reason:   r.reason || '',
+      notes:    r.notes  || '',
+      status:   r.status,
+      requested: new Date(r.created_at).toLocaleString(),
     }));
   }
 
@@ -1658,8 +1670,9 @@ async function syncToSheets(type) {
       toast(json.error, 'er');
     }
   } catch (err) {
-    statusEl.textContent = `Network error: ${err.message}`;
-    toast('Sync failed — check the URL and try again', 'er');
+    console.error('Sync error:', err);
+    statusEl.textContent = `Error: ${err.message}`;
+    toast('Sync failed — check browser console for details', 'er');
   }
 }
 
