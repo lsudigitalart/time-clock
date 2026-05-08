@@ -715,6 +715,22 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
   </div>
 
+  <!-- Admin Employee History -->
+  <div class="modal hidden" id="m-adm-emp-hist" style="max-width:800px;width:95vw">
+    <button class="m-close" onclick="closeModal()">✕</button>
+    <div class="m-title" id="adm-emp-hist-title">Employee History</div>
+    <div class="flex-center gap2" style="margin-bottom:1rem">
+      <label class="lbl" style="margin:0">Month:</label>
+      <input type="month" id="adm-hist-month" class="inp" style="width:auto" onchange="loadAdminEmpHistory()">
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>In</th><th>Out</th><th>Duration</th><th>Notes</th><th>Type</th><th></th></tr></thead>
+        <tbody id="tb-adm-emp-hist"></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Profile -->
   <div class="modal hidden" id="m-profile">
     <button class="m-close" onclick="closeModal()">✕</button>
@@ -1416,33 +1432,8 @@ function openEditEntryModal(id) {
   document.getElementById('ee-out').value   = entry.clock_out ? toLocal(entry.clock_out) : '';
   document.getElementById('ee-notes').value = entry.notes || '';
   document.getElementById('ee-err').classList.remove('on');
+  document.getElementById('m-edit-entry').dataset.adminMode = '';
   showOnly('m-edit-entry');
-}
-
-async function saveEditEntry() {
-  const errEl = document.getElementById('ee-err');
-  errEl.classList.remove('on');
-  const id    = document.getElementById('ee-id').value;
-  const inVal = document.getElementById('ee-in').value;
-  const outVal= document.getElementById('ee-out').value;
-  const notes = document.getElementById('ee-notes').value.trim() || null;
-
-  if (!inVal) { errEl.textContent = 'Clock-in time is required.'; errEl.classList.add('on'); return; }
-  const clockIn  = new Date(inVal).toISOString();
-  const clockOut = outVal ? new Date(outVal).toISOString() : null;
-  if (clockOut && clockOut <= clockIn) {
-    errEl.textContent = 'Clock-out must be after clock-in.'; errEl.classList.add('on'); return;
-  }
-
-  const { error } = await sb.from('time_entries')
-    .update({ clock_in: clockIn, clock_out: clockOut, notes })
-    .eq('id', id).eq('user_id', S.user.id);
-  if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
-
-  closeModal();
-  toast('Entry updated!', 'ok');
-  await loadHistory();
-  await Promise.all([loadWeekProgress(), loadTodayHours(), loadMonthHours()]);
 }
 
 function openTimeOffModal() {
@@ -1544,6 +1535,113 @@ async function loadAdminPage() {
   await Promise.all([loadAdminEmployees(), loadAdminTimeOff(), loadAdminStats()]);
 }
 
+/* ═══════════════════════════════════════════════
+   ADMIN EMPLOYEE HISTORY
+   ═══════════════════════════════════════════════ */
+// State for which employee the admin is viewing
+const AH = { userId: null, name: null };
+
+function openAdminEmpHistory(userId, name) {
+  AH.userId = userId;
+  AH.name   = name;
+  document.getElementById('adm-emp-hist-title').textContent = `📋 ${name}'s History`;
+  // Default to current month
+  const now = new Date();
+  document.getElementById('adm-hist-month').value =
+    `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  showOnly('m-adm-emp-hist');
+  loadAdminEmpHistory();
+}
+
+async function loadAdminEmpHistory() {
+  if (!AH.userId) return;
+  const monthVal = document.getElementById('adm-hist-month').value;
+  const [yr, mo] = monthVal.split('-').map(Number);
+  const s = new Date(yr, mo-1, 1);
+  const e = new Date(yr, mo, 1);
+
+  const { data: entries } = await sb.from('time_entries').select('*')
+    .eq('user_id', AH.userId)
+    .gte('clock_in', s.toISOString()).lt('clock_in', e.toISOString())
+    .order('clock_in', { ascending: false });
+
+  S._adminHistCache = entries || [];
+  const tb = document.getElementById('tb-adm-emp-hist');
+
+  if (!entries?.length) {
+    tb.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No clock entries this month</div></div></td></tr>';
+    return;
+  }
+
+  tb.innerHTML = entries.map(en => {
+    const ci = new Date(en.clock_in);
+    const co = en.clock_out ? new Date(en.clock_out) : null;
+    return `<tr>
+      <td class="td-hi">${ci.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td>
+      <td class="td-mono">${fmtTime(ci)}</td>
+      <td class="td-mono">${co ? fmtTime(co) : '—'}</td>
+      <td class="td-mono">${co ? fmtDur((co-ci)/3600000) : '—'}</td>
+      <td>${en.notes || '<span style="color:var(--muted)">—</span>'}</td>
+      <td><span class="badge bb">Clock</span></td>
+      <td><button class="btn btn-ghost" style="padding:.2rem .6rem;font-size:.8rem" onclick="openAdminEditEntry('${en.id}')">Edit</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function openAdminEditEntry(id) {
+  const entry = S._adminHistCache?.find(e => e.id === id);
+  if (!entry) { toast('Entry not found — please refresh', 'er'); return; }
+  const toLocal = iso => {
+    const d = new Date(iso);
+    return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  };
+  document.getElementById('ee-id').value    = id;
+  document.getElementById('ee-in').value    = toLocal(entry.clock_in);
+  document.getElementById('ee-out').value   = entry.clock_out ? toLocal(entry.clock_out) : '';
+  document.getElementById('ee-notes').value = entry.notes || '';
+  document.getElementById('ee-err').classList.remove('on');
+  // Tag modal so save knows which flow to use
+  document.getElementById('m-edit-entry').dataset.adminMode = '1';
+  showOnly('m-edit-entry');
+}
+
+async function saveEditEntry() {
+  const errEl = document.getElementById('ee-err');
+  errEl.classList.remove('on');
+  const id     = document.getElementById('ee-id').value;
+  const inVal  = document.getElementById('ee-in').value;
+  const outVal = document.getElementById('ee-out').value;
+  const notes  = document.getElementById('ee-notes').value.trim() || null;
+  const adminMode = document.getElementById('m-edit-entry').dataset.adminMode === '1';
+
+  if (!inVal) { errEl.textContent = 'Clock-in time is required.'; errEl.classList.add('on'); return; }
+  const clockIn  = new Date(inVal).toISOString();
+  const clockOut = outVal ? new Date(outVal).toISOString() : null;
+  if (clockOut && clockOut <= clockIn) {
+    errEl.textContent = 'Clock-out must be after clock-in.'; errEl.classList.add('on'); return;
+  }
+
+  let query = sb.from('time_entries').update({ clock_in: clockIn, clock_out: clockOut, notes }).eq('id', id);
+  if (!adminMode) query = query.eq('user_id', S.user.id);
+
+  const { error } = await query;
+  if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
+
+  closeModal();
+  toast('Entry updated!', 'ok');
+
+  if (adminMode) {
+    document.getElementById('m-edit-entry').dataset.adminMode = '';
+    // Re-open the employee history modal
+    showOnly('m-adm-emp-hist');
+    await loadAdminEmpHistory();
+    await loadAdminStats();
+  } else {
+    await loadHistory();
+    await Promise.all([loadWeekProgress(), loadTodayHours(), loadMonthHours()]);
+  }
+}
+
 async function loadAdminEmployees() {
   const { data: members } = await sb.from('workplace_members')
     .select('*, profile:profiles(id,full_name,role)')
@@ -1565,7 +1663,7 @@ async function loadAdminEmployees() {
     (entries||[]).forEach(e => wh += (new Date(e.clock_out)-new Date(e.clock_in))/3600000);
     const target = S.workplace.hours_per_week || 40;
     const pct = Math.min((wh/target)*100,100);
-    return `<div class="emp-row">
+    return `<div class="emp-row" style="cursor:pointer" onclick="openAdminEmpHistory('${uid}','${m.profile?.full_name||'Employee'}')" title="View &amp; edit history">
       <div>
         <div class="emp-name">${m.profile?.full_name || 'Unknown'}</div>
         <div class="emp-role">${m.role==='admin'?'👑 Admin':'👤 Employee'}</div>
@@ -1575,7 +1673,7 @@ async function loadAdminEmployees() {
         <div class="prog-wrap" style="margin:.3rem 0;height:5px;width:120px">
           <div class="prog-bar" style="width:${pct}%"></div>
         </div>
-        <div class="emp-hrs-sub">${pct.toFixed(0)}% this week</div>
+        <div class="emp-hrs-sub" style="font-size:.7rem">${pct.toFixed(0)}% this week &middot; <span style="color:var(--accent)">View history ›</span></div>
       </div>
     </div>`;
   }));
