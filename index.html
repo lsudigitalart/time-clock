@@ -1378,16 +1378,24 @@ async function loadHistory() {
         <td class="td-mono">${co ? fmtDur((co-ci)/3600000) : '—'}</td>
         <td>${e.notes || '<span style="color:var(--muted)">—</span>'}</td>
         <td><span class="badge bb">Clock</span></td>
+        <td><button class="btn btn-ghost" style="padding:.2rem .6rem;font-size:.8rem" onclick="openEditEntryModal('${e.id}')">Edit</button></td>
       </tr>`;
     } else {
       const t = r.d;
+      const sd = t.start_date || t.date;
+      const ed = t.end_date   || t.date;
+      const days = sd && ed ? Math.round((new Date(ed+'T12:00')-new Date(sd+'T12:00'))/86400000)+1 : 1;
+      const dateLabel = sd === ed
+        ? new Date(sd+'T12:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})
+        : `${new Date(sd+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${new Date(ed+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
       const sc = t.status==='approved'?'bg':t.status==='denied'?'br':'ba';
       return `<tr>
-        <td class="td-hi">${r.ts.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td>
+        <td class="td-hi">${dateLabel}</td>
         <td class="td-mono">—</td><td class="td-mono">—</td>
-        <td class="td-mono">1 day</td>
+        <td class="td-mono">${days} day${days===1?'':'s'}</td>
         <td>${t.reason||'—'}${t.notes?' <span style="color:var(--muted);font-size:.8em">('+t.notes+')</span>':''}</td>
         <td><span class="badge ${sc}">${t.status}</span></td>
+        <td></td>
       </tr>`;
     }
   }).join('');
