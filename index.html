@@ -2056,7 +2056,7 @@ function normalizeInviteCode(value) {
   }
 }
 
-function applyInviteFromUrl() {
+async function applyInviteFromUrl() {
   const invite = new URLSearchParams(window.location.search).get('invite');
   if (!invite) return;
   const inviteEl = document.getElementById('s-invite');
@@ -2068,6 +2068,17 @@ function applyInviteFromUrl() {
   if (roleEl) roleEl.checked = true;
   
   roleChange();
+  
+  // If admin invite, fetch and pre-populate workplace name
+  if (isAdminInvite) {
+    const wpId = invite.slice(0, -6); // Remove ':admin' suffix
+    const { data: wp } = await sb.from('workplaces').select('name').eq('id', wpId).maybeSingle();
+    if (wp) {
+      const wpNameEl = document.getElementById('s-wp-name');
+      if (wpNameEl) wpNameEl.value = wp.name;
+    }
+  }
+  
   authTab('signup');
 }
 
