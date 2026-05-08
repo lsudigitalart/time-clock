@@ -598,9 +598,17 @@ tr:hover td{background:rgba(255,255,255,.015)}
         </div>
         <p class="hint" style="margin-bottom:1rem">Paste your Google Apps Script web-app URL below, then sync either dataset to a connected Google Sheet. <button class="btn btn-ghost btn-sm" onclick="toggleScriptHelp()" style="margin-left:.4rem">How to set up ›</button></p>
         <div id="sheets-help" style="display:none;margin-bottom:1rem">
-          <p class="hint" style="margin-bottom:.4rem">1. Open <strong>script.google.com</strong> → New project.<br>2. Replace the default code with the script below.<br>3. Click <em>Deploy → New deployment → Web app</em>. Set <em>Execute as: Me</em> and <em>Who has access: Anyone</em>.<br>4. Copy the web-app URL and paste it here.</p>
+          <p class="hint" style="margin-bottom:.4rem"><strong>Setup steps:</strong><br>
+          1. Open <strong>script.google.com</strong> → New project.<br>
+          2. Replace the default code with the script below.<br>
+          3. Click <em>Deploy → New deployment → Web app</em>:<br>
+          &nbsp;&nbsp; • Execute as: <strong>Me</strong><br>
+          &nbsp;&nbsp; • Who has access: <strong>Anyone</strong><br>
+          4. Grant permissions when prompted.<br>
+          5. Copy the web-app URL and paste it below.<br>
+          <strong>Note:</strong> If you get a CORS error after pasting the URL, it means you need to <strong>redeploy</strong> the script. Go back to script.google.com → Deploy (top right) → Choose the existing web app deployment → Click the three dots → Delete. Then create a new deployment following the steps above.</p>
           <div style="position:relative">
-            <textarea id="sheets-script-tmpl" class="inp" rows="10" readonly style="font-family:var(--ff-mono);font-size:.72rem;resize:none;white-space:pre"></textarea>
+            <textarea id="sheets-script-tmpl" class="inp" rows="12" readonly style="font-family:var(--ff-mono);font-size:.72rem;resize:none;white-space:pre"></textarea>
             <button class="btn btn-ghost btn-sm" style="position:absolute;top:.4rem;right:.4rem" onclick="copyScriptTemplate()">Copy</button>
           </div>
         </div>
@@ -1548,7 +1556,13 @@ async function setToStatus(id, status) {
    GOOGLE SHEETS SYNC
    ═══════════════════════════════════════════════ */
 function buildScriptTemplate() {
-  return `function doPost(e) {
+  return `function doOptions(e) {
+  return ContentService
+    .createTextOutput('')
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
+function doPost(e) {
   try {
     var payload = JSON.parse(e.postData.contents);
     var sheet = SpreadsheetApp.getActiveSpreadsheet()
