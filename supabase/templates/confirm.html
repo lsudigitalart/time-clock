@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirm your PunchCard account</title>
+  <style>
+    body { margin: 0; padding: 0; background: #f4f4f7; font-family: 'IBM Plex Sans', Arial, sans-serif; }
+    .wrap { max-width: 520px; margin: 40px auto; background: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+    .header { background: #0a0b10; padding: 32px 40px 24px; text-align: center; }
+    .logo { font-size: 1.5rem; font-weight: 800; color: #e8942a; letter-spacing: .06em; }
+    .logo-sub { font-size: .72rem; color: #9fa5c0; letter-spacing: .12em; text-transform: uppercase; margin-top: 4px; }
+    .body { padding: 36px 40px 28px; }
+    h1 { font-size: 1.25rem; font-weight: 700; color: #1a1c2e; margin: 0 0 12px; }
+    p  { font-size: .93rem; color: #4a4f6a; line-height: 1.65; margin: 0 0 20px; }
+    .btn-wrap { text-align: center; margin: 28px 0 24px; }
+    .btn { display: inline-block; background: #e8942a; color: #08090e; text-decoration: none;
+           font-weight: 700; font-size: .95rem; padding: 14px 36px; border-radius: 6px;
+           letter-spacing: .03em; }
+    .note { font-size: .78rem; color: #9fa5c0; text-align: center; }
+    .note a { color: #9fa5c0; }
+    .footer { background: #f8f8fb; border-top: 1px solid #e8e8ef; padding: 18px 40px; text-align: center; }
+    .footer p { font-size: .72rem; color: #b0b3c6; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="logo">⏱ PUNCHCARD</div>
+      <div class="logo-sub">Simple time tracking</div>
+    </div>
+    <div class="body">
+      <h1>Welcome — you're almost in!</h1>
+      <p>Thanks for signing up. Just click the button below to confirm your email address and activate your account.</p>
+      <div class="btn-wrap">
+        <a class="btn" href="{{ .ConfirmationURL }}">Confirm my account</a>
+      </div>
+      <p>Once confirmed, you'll be able to sign in and start tracking your time.</p>
+      <p class="note">
+        This link expires in 24 hours. If you didn't sign up for PunchCard, you can safely ignore this email.<br><br>
+        Having trouble with the button? <a href="{{ .ConfirmationURL }}">Copy this link</a>
+      </p>
+    </div>
+    <div class="footer">
+      <p>You're receiving this because someone signed up with this email address at PunchCard.</p>
+    </div>
+  </div>
+</body>
+</html>
