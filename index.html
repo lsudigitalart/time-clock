@@ -480,7 +480,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
       </div>
       <div class="card">
         <div class="tbl-wrap"><table>
-          <thead><tr><th>Date</th><th>Hours</th><th>Reason</th><th>Notes</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Date(s)</th><th>Days</th><th>Reason</th><th>Notes</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="tb-to"><tr><td colspan="6"><div class="empty"><div class="empty-icon">🌴</div><div class="empty-txt">No requests yet</div></div></td></tr></tbody>
         </table></div>
       </div>
@@ -577,12 +577,14 @@ tr:hover td{background:rgba(255,255,255,.015)}
   <div class="modal hidden" id="m-timeoff">
     <button class="m-close" onclick="closeModal()">✕</button>
     <div class="m-title">🌴 Request Time Off</div>
-    <div class="fld"><label class="lbl">Date</label>
-      <input type="date" id="to-date" class="inp" required></div>
     <div class="frow mb2">
-      <div class="fld mb1"><label class="lbl">Hours</label>
-        <input type="number" id="to-hrs" class="inp" value="8" min=".5" max="24" step=".5"></div>
-      <div class="fld mb1"><label class="lbl">Reason</label>
+      <div class="fld mb1"><label class="lbl">Start Date</label>
+        <input type="date" id="to-start" class="inp" required></div>
+      <div class="fld mb1"><label class="lbl">End Date</label>
+        <input type="date" id="to-end" class="inp" required></div>
+    </div>
+    <div class="frow mb2">
+      <div class="fld mb1" style="grid-column:1/-1"><label class="lbl">Reason</label>
         <select id="to-reason" class="inp">
           <option>Vacation</option><option>Sick Leave</option>
           <option>Personal</option><option>Holiday</option><option>Other</option>
@@ -1104,7 +1106,7 @@ async function loadHistory() {
       return `<tr>
         <td class="td-hi">${r.ts.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td>
         <td class="td-mono">—</td><td class="td-mono">—</td>
-        <td class="td-mono">${t.hours}h</td>
+        <td class="td-mono">1 day</td>
         <td>${t.reason||'—'}${t.notes?' <span style="color:var(--muted);font-size:.8em">('+t.notes+')</span>':''}</td>
         <td><span class="badge ${sc}">${t.status}</span></td>
       </tr>`;
@@ -1120,8 +1122,9 @@ function openTimeOffModal() {
     toast('No workplace assigned. Ask your admin to add you, then sign out/in.', 'er');
     return;
   }
-  document.getElementById('to-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('to-hrs').value = '8';
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('to-start').value = today;
+  document.getElementById('to-end').value = today;
   document.getElementById('to-notes').value = '';
   showOnly('m-timeoff');
 }
@@ -1135,21 +1138,34 @@ async function submitTimeOff() {
     }
   }
 
-  const date = document.getElementById('to-date').value;
-  const hrs  = parseFloat(document.getElementById('to-hrs').value);
-  if (!date || !hrs) { toast('Fill in required fields', 'er'); return; }
+  const start  = document.getElementById('to-start').value;
+  const end    = document.getElementById('to-end').value;
+  if (!start || !end) { toast('Please select a date range.', 'er'); return; }
+  if (end < start) { toast('End date must be on or after start date.', 'er'); return; }
 
-  const { error } = await sb.from('time_off_requests').insert({
-    user_id: S.user.id,
-    workplace_id: S.workplace?.id || null,
-    date, hours: hrs,
-    reason: document.getElementById('to-reason').value,
-    notes:  document.getElementById('to-notes').value.trim() || null,
-    status: 'pending',
-  });
+  const reason = document.getElementById('to-reason').value;
+  const notes  = document.getElementById('to-notes').value.trim() || null;
+
+  // Build one row per calendar day in the range
+  const rows = [];
+  const cur = new Date(start + 'T12:00');
+  const last = new Date(end + 'T12:00');
+  while (cur <= last) {
+    rows.push({
+      user_id:      S.user.id,
+      workplace_id: S.workplace.id,
+      date:         cur.toISOString().split('T')[0],
+      hours:        8,
+      reason, notes, status: 'pending',
+    });
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  const { error } = await sb.from('time_off_requests').insert(rows);
   if (error) { toast(error.message, 'er'); return; }
   closeModal();
-  toast('Time off requested!', 'ok');
+  const days = rows.length;
+  toast(`Time off requested for ${days} day${days === 1 ? '' : 's'}!`, 'ok');
   await loadTimeOffRequests();
 }
 
@@ -1164,7 +1180,7 @@ async function loadTimeOffRequests() {
     const sc = t.status==='approved'?'bg':t.status==='denied'?'br':'ba';
     return `<tr>
       <td class="td-hi">${new Date(t.date+'T12:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})}</td>
-      <td class="td-mono">${t.hours}h</td>
+      <td class="td-mono">1</td>
       <td>${t.reason||'—'}</td>
       <td>${t.notes||'<span style="color:var(--muted)">—</span>'}</td>
       <td><span class="badge ${sc}">${t.status}</span></td>
@@ -1255,7 +1271,7 @@ async function loadAdminTimeOff() {
     return `<tr>
       <td class="td-hi">${t.profile?.full_name||'—'}</td>
       <td class="td-mono">${new Date(t.date+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</td>
-      <td class="td-mono">${t.hours}h</td>
+      <td class="td-mono">1 day</td>
       <td>${t.reason||'—'}</td>
       <td><span class="badge ${sc}">${t.status}</span></td>
       <td>${t.status==='pending'?`<div class="gap2">
