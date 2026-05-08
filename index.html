@@ -560,19 +560,38 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <div class="card sec">
         <div class="card-title"><div class="card-dot"></div> Invite Employees</div>
         <div class="fld">
-          <label class="lbl">Invite Code</label>
+          <label class="lbl">Employee Invite Code</label>
           <div class="flex-center gap2">
             <input type="text" id="adm-invite-code" class="inp td-mono" readonly>
             <button class="btn btn-ghost btn-sm" onclick="copyInviteCode()">Copy</button>
           </div>
         </div>
         <div class="fld" style="margin-bottom:0">
-          <label class="lbl">Invite Link</label>
+          <label class="lbl">Employee Invite Link</label>
           <div class="flex-center gap2">
             <input type="text" id="adm-invite-link" class="inp td-mono" readonly>
             <button class="btn btn-ghost btn-sm" onclick="copyInviteLink()">Copy</button>
           </div>
           <p class="hint">Share this link with employees. It pre-fills their invite code at sign-up.</p>
+        </div>
+      </div>
+
+      <div class="card sec">
+        <div class="card-title"><div class="card-dot"></div> Invite Co-Admins</div>
+        <div class="fld">
+          <label class="lbl">Admin Invite Code</label>
+          <div class="flex-center gap2">
+            <input type="text" id="adm-admin-invite-code" class="inp td-mono" readonly>
+            <button class="btn btn-ghost btn-sm" onclick="copyAdminInviteCode()">Copy</button>
+          </div>
+        </div>
+        <div class="fld" style="margin-bottom:0">
+          <label class="lbl">Admin Invite Link</label>
+          <div class="flex-center gap2">
+            <input type="text" id="adm-admin-invite-link" class="inp td-mono" readonly>
+            <button class="btn btn-ghost btn-sm" onclick="copyAdminInviteLink()">Copy</button>
+          </div>
+          <p class="hint">Only share with trusted staff. Anyone who signs up with this link gets full admin access.</p>
         </div>
       </div>
 
@@ -800,7 +819,7 @@ const sb = supabase.createClient(SB_URL, SB_KEY);
 
 /* ─── App state ───────────────────────────────── */
 const S = {
-  user: null, profile: null, workplace: null,
+  user: null, profile: null, workplace: null, memberRole: null,
   entry: null,               // active clock-in entry
   clockTick: null,           // setInterval for elapsed display
   acoTimer: null,            // setTimeout for auto clock-out
@@ -907,26 +926,33 @@ async function doSignup(e) {
   }
 
   let inviteWorkplaceId = null;
+  let inviteAsAdmin = false;
   if (role === 'user') {
     const inviteCode = normalizeInviteCode(inviteCodeRaw);
-    const { data: wp, error: wpErr } = await sb.from('workplaces')
-      .select('id')
-      .eq('id', inviteCode)
-      .limit(1)
-      .maybeSingle();
-    if (wpErr || !wp) {
-      errEl.textContent = 'Invalid invite code. Please check with your admin.';
-      errEl.classList.add('on');
-      return;
+    // Admin invite codes are suffixed with ':admin'
+    if (inviteCode.endsWith(':admin')) {
+      const wpId = inviteCode.slice(0, -6);
+      const { data: wp } = await sb.from('workplaces').select('id').eq('id', wpId).maybeSingle();
+      if (!wp) { errEl.textContent = 'Invalid admin invite code.'; errEl.classList.add('on'); return; }
+      inviteWorkplaceId = wp.id;
+      inviteAsAdmin = true;
+    } else {
+      const { data: wp, error: wpErr } = await sb.from('workplaces')
+        .select('id').eq('id', inviteCode).limit(1).maybeSingle();
+      if (wpErr || !wp) {
+        errEl.textContent = 'Invalid invite code. Please check with your admin.';
+        errEl.classList.add('on');
+        return;
+      }
+      inviteWorkplaceId = wp.id;
     }
-    inviteWorkplaceId = wp.id;
   }
 
   btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Creating…';
 
   const meta = {
     full_name: name, role,
-    ...(role === 'user'  && { workplace_id: inviteWorkplaceId }),
+    ...(role === 'user'  && { workplace_id: inviteWorkplaceId, invite_as_admin: inviteAsAdmin }),
     ...(role === 'admin' && { workplace_name: document.getElementById('s-wp-name').value.trim() }),
   };
 
@@ -1055,7 +1081,8 @@ async function onLogin(user) {
         await sb.from('workplace_members').insert({ workplace_id: existingWp.id, user_id: user.id, role: 'admin' });
       }
     } else if (prof?.role === 'user' && m.workplace_id) {
-      await sb.from('workplace_members').insert({ workplace_id: m.workplace_id, user_id: user.id, role: 'member' });
+      const memberRole = m.invite_as_admin ? 'admin' : 'member';
+      await sb.from('workplace_members').insert({ workplace_id: m.workplace_id, user_id: user.id, role: memberRole });
     }
   }
 
@@ -1070,7 +1097,7 @@ async function onLogin(user) {
   document.getElementById('nav-avatar').textContent   = initials;
   document.getElementById('nav-username').textContent = prof?.full_name || user.email || 'Account';
 
-  if (prof?.role === 'admin') document.getElementById('nav-admin').classList.remove('hidden');
+  if (prof?.role === 'admin' || S.memberRole === 'admin') document.getElementById('nav-admin').classList.remove('hidden');
 
   await loadDashboard();
 }
@@ -1081,16 +1108,18 @@ async function loadWorkplace() {
     .eq('user_id', S.user.id).limit(1).maybeSingle();
   if (data?.workplace) {
     S.workplace = data.workplace;
+    S.memberRole = data.role;  // 'admin' or 'member'
     document.getElementById('nav-wp-name').textContent = data.workplace.name;
   } else {
     S.workplace = null;
+    S.memberRole = null;
     document.getElementById('nav-wp-name').textContent = 'No workplace';
   }
 }
 
 function onLogout() {
   clearInterval(S.clockTick); clearTimeout(S.acoTimer);
-  Object.assign(S, { user:null, profile:null, workplace:null, entry:null, clockTick:null, acoTimer:null });
+  Object.assign(S, { user:null, profile:null, workplace:null, memberRole:null, entry:null, clockTick:null, acoTimer:null });
   document.getElementById('auth-wrap').style.display = 'flex';
   document.getElementById('app-wrap').classList.remove('on');
   document.getElementById('nav-admin').classList.add('hidden');
@@ -1529,8 +1558,12 @@ async function loadAdminPage() {
   document.getElementById('adm-hrs-inp').value      = S.workplace.hours_per_week || 40;
   const inviteCode = S.workplace.id;
   const inviteLink = `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(inviteCode)}`;
+  const adminInviteCode = S.workplace.id + ':admin';
+  const adminInviteLink = `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(adminInviteCode)}`;
   document.getElementById('adm-invite-code').value = inviteCode;
   document.getElementById('adm-invite-link').value = inviteLink;
+  document.getElementById('adm-admin-invite-code').value = adminInviteCode;
+  document.getElementById('adm-admin-invite-link').value = adminInviteLink;
   // restore saved sheets URL
   const savedUrl = localStorage.getItem('sheets_url_' + S.workplace.id) || '';
   document.getElementById('sheets-url').value = savedUrl;
@@ -2042,6 +2075,28 @@ async function copyInviteLink() {
   try {
     await navigator.clipboard.writeText(v);
     toast('Invite link copied!', 'ok');
+  } catch {
+    toast('Unable to copy. You can select and copy manually.', 'er');
+  }
+}
+
+async function copyAdminInviteCode() {
+  const v = document.getElementById('adm-admin-invite-code').value;
+  if (!v) return;
+  try {
+    await navigator.clipboard.writeText(v);
+    toast('Admin invite code copied!', 'ok');
+  } catch {
+    toast('Unable to copy. You can select and copy manually.', 'er');
+  }
+}
+
+async function copyAdminInviteLink() {
+  const v = document.getElementById('adm-admin-invite-link').value;
+  if (!v) return;
+  try {
+    await navigator.clipboard.writeText(v);
+    toast('Admin invite link copied!', 'ok');
   } catch {
     toast('Unable to copy. You can select and copy manually.', 'er');
   }

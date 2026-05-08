@@ -36,9 +36,10 @@ Deno.serve(async (req) => {
         .from('workplace_members')
         .select('role, workplace_id')
         .eq('user_id', caller.id)
+        .in('role', ['admin'])
         .maybeSingle();
 
-      if (callerMembership?.role !== 'admin') {
+      if (!callerMembership) {
         return json({ error: 'Only admins can delete other accounts' }, 403);
       }
 

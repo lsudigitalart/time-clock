@@ -121,6 +121,17 @@ CREATE POLICY "profiles: update own"
 -- ── workplaces ────────────────────────────────────────────────
 -- Allow anon SELECT so the sign-up page can list workplaces.
 
+-- Helper: true if current user is the owner OR a co-admin member of a workplace
+CREATE OR REPLACE FUNCTION is_workplace_admin(wid uuid)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM workplaces w WHERE w.id = wid AND w.admin_id = auth.uid()
+  ) OR EXISTS (
+    SELECT 1 FROM workplace_members m
+    WHERE m.workplace_id = wid AND m.user_id = auth.uid() AND m.role = 'admin'
+  );
+$$;
+
 CREATE POLICY "workplaces: read all"
   ON public.workplaces FOR SELECT
   USING (true);
@@ -142,45 +153,22 @@ CREATE POLICY "workplaces: update by admin"
 CREATE POLICY "workplace_members: read own or admin"
   ON public.workplace_members FOR SELECT
   TO authenticated
-  USING (
-    auth.uid() = user_id
-    OR EXISTS (
-      SELECT 1 FROM public.workplaces w
-      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
-    )
-  );
+  USING (auth.uid() = user_id OR is_workplace_admin(workplace_id));
 
 CREATE POLICY "workplace_members: insert own or admin"
   ON public.workplace_members FOR INSERT
   TO authenticated
-  WITH CHECK (
-    auth.uid() = user_id
-    OR EXISTS (
-      SELECT 1 FROM public.workplaces w
-      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
-    )
-  );
+  WITH CHECK (auth.uid() = user_id OR is_workplace_admin(workplace_id));
 
 CREATE POLICY "workplace_members: update by admin"
   ON public.workplace_members FOR UPDATE
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.workplaces w
-      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
-    )
-  );
+  USING (is_workplace_admin(workplace_id));
 
 CREATE POLICY "workplace_members: delete by admin or self"
   ON public.workplace_members FOR DELETE
   TO authenticated
-  USING (
-    auth.uid() = user_id
-    OR EXISTS (
-      SELECT 1 FROM public.workplaces w
-      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
-    )
-  );
+  USING (auth.uid() = user_id OR is_workplace_admin(workplace_id));
 
 
 -- ── time_entries ──────────────────────────────────────────────
