@@ -1227,7 +1227,10 @@ async function loadWeekProgress() {
   let hrs = 0;
   (entries || []).forEach(e => hrs += (new Date(e.clock_out) - new Date(e.clock_in)) / 3600000);
   (approved || []).forEach(t => hrs += t.hours);
-  if (S.entry) hrs += (Date.now() - new Date(S.entry.clock_in).getTime()) / 3600000;
+  if (S.entry) {
+    const ci = new Date(S.entry.clock_in);
+    if (ci >= start && ci <= end) hrs += (Date.now() - ci.getTime()) / 3600000;
+  }
 
   const target = S.workplace?.hours_per_week || 40;
   const pct    = Math.min((hrs / target) * 100, 100);
@@ -1270,6 +1273,7 @@ async function loadMonthHours() {
     .eq('user_id',S.user.id).gte('clock_in',s.toISOString()).lte('clock_in',e.toISOString()).not('clock_out','is',null);
   let h = 0;
   (data||[]).forEach(x => h += (new Date(x.clock_out)-new Date(x.clock_in))/3600000);
+  if (S.entry) { const ci = new Date(S.entry.clock_in); if (ci >= s && ci <= e) h += (Date.now() - ci.getTime()) / 3600000; }
   document.getElementById('st-month').textContent = h.toFixed(1)+'h';
 }
 
