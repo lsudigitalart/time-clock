@@ -379,9 +379,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
       </div>
 
       <div id="emp-fields">
-        <div class="fld"><label class="lbl">Join Workplace</label>
-          <select id="s-wp" class="inp"><option value="">— Select a workplace —</option></select>
-          <p class="hint">Select the workplace you're joining</p>
+        <div class="fld"><label class="lbl">Invite Code</label>
+          <input type="text" id="s-invite" class="inp" placeholder="Paste invite code or invite link">
+          <p class="hint">Ask your admin for an invite code or invite link</p>
         </div>
       </div>
 
@@ -551,6 +551,25 @@ tr:hover td{background:rgba(255,255,255,.015)}
       </div>
 
       <div class="card sec">
+        <div class="card-title"><div class="card-dot"></div> Invite Employees</div>
+        <div class="fld">
+          <label class="lbl">Invite Code</label>
+          <div class="flex-center gap2">
+            <input type="text" id="adm-invite-code" class="inp td-mono" readonly>
+            <button class="btn btn-ghost btn-sm" onclick="copyInviteCode()">Copy</button>
+          </div>
+        </div>
+        <div class="fld" style="margin-bottom:0">
+          <label class="lbl">Invite Link</label>
+          <div class="flex-center gap2">
+            <input type="text" id="adm-invite-link" class="inp td-mono" readonly>
+            <button class="btn btn-ghost btn-sm" onclick="copyInviteLink()">Copy</button>
+          </div>
+          <p class="hint">Share this link with employees. It pre-fills their invite code at sign-up.</p>
+        </div>
+      </div>
+
+      <div class="card sec">
         <div class="card-title flex-center jb" style="margin-bottom:1rem">
           <div class="flex-center gap2"><div class="card-dot"></div> Employees</div>
           <button class="btn btn-ghost btn-sm" onclick="loadAdminPage()">↺ Refresh</button>
@@ -669,6 +688,8 @@ const S = {
    INIT
    ═══════════════════════════════════════════════ */
 async function init() {
+  applyInviteFromUrl();
+
   const recoveryInUrl = isRecoveryLink();
   if (recoveryInUrl) showPasswordUpdateForm();
 
@@ -690,7 +711,6 @@ async function init() {
     if (ev === 'SIGNED_OUT')         onLogout();
   });
 
-  await fetchWorkplacesForDropdown();
   setDate();
   setInterval(setDate, 60000);
   buildMonthFilter();
@@ -740,14 +760,7 @@ function roleChange() {
 }
 
 async function fetchWorkplacesForDropdown() {
-  const { data } = await sb.from('workplaces').select('id,name').order('name');
-  const sel = document.getElementById('s-wp');
-  const first = sel.options[0];
-  sel.innerHTML = ''; sel.appendChild(first);
-  (data || []).forEach(w => {
-    const o = document.createElement('option');
-    o.value = w.id; o.textContent = w.name; sel.appendChild(o);
-  });
+  // Replaced by invite-code join flow.
 }
 
 async function doSignup(e) {
@@ -761,19 +774,36 @@ async function doSignup(e) {
   const email= document.getElementById('s-email').value.trim();
   const pass = document.getElementById('s-pass').value;
   const role = document.querySelector('input[name="role"]:checked').value;
+  const inviteCodeRaw = document.getElementById('s-invite').value.trim();
 
-  if (role === 'user' && !document.getElementById('s-wp').value) {
-    errEl.textContent = 'Please select a workplace.'; errEl.classList.add('on'); return;
+  if (role === 'user' && !inviteCodeRaw) {
+    errEl.textContent = 'Please enter an invite code.'; errEl.classList.add('on'); return;
   }
   if (role === 'admin' && !document.getElementById('s-wp-name').value.trim()) {
     errEl.textContent = 'Please enter a workplace name.'; errEl.classList.add('on'); return;
+  }
+
+  let inviteWorkplaceId = null;
+  if (role === 'user') {
+    const inviteCode = normalizeInviteCode(inviteCodeRaw);
+    const { data: wp, error: wpErr } = await sb.from('workplaces')
+      .select('id')
+      .eq('id', inviteCode)
+      .limit(1)
+      .maybeSingle();
+    if (wpErr || !wp) {
+      errEl.textContent = 'Invalid invite code. Please check with your admin.';
+      errEl.classList.add('on');
+      return;
+    }
+    inviteWorkplaceId = wp.id;
   }
 
   btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Creating…';
 
   const meta = {
     full_name: name, role,
-    ...(role === 'user'  && { workplace_id:   document.getElementById('s-wp').value }),
+    ...(role === 'user'  && { workplace_id: inviteWorkplaceId }),
     ...(role === 'admin' && { workplace_name: document.getElementById('s-wp-name').value.trim() }),
   };
 
@@ -1325,6 +1355,10 @@ async function loadAdminPage() {
   document.getElementById('adm-wp-lbl').textContent = S.workplace.name;
   document.getElementById('adm-sched').textContent  = S.workplace.hours_per_week || 40;
   document.getElementById('adm-hrs-inp').value      = S.workplace.hours_per_week || 40;
+  const inviteCode = S.workplace.id;
+  const inviteLink = `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(inviteCode)}`;
+  document.getElementById('adm-invite-code').value = inviteCode;
+  document.getElementById('adm-invite-link').value = inviteLink;
   await Promise.all([loadAdminEmployees(), loadAdminTimeOff(), loadAdminStats()]);
 }
 
@@ -1337,7 +1371,7 @@ async function loadAdminEmployees() {
   document.getElementById('adm-emp-cnt').textContent = members?.length || 0;
 
   if (!members?.length) {
-    list.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet. Share your workplace name so employees can join on signup.</div></div>'; return;
+    list.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet. Share your invite link so employees can join on signup.</div></div>'; return;
   }
 
   const { start, end } = weekRange();
@@ -1435,6 +1469,50 @@ async function saveWorkplace() {
   document.getElementById('nav-wp-name').textContent = name;
   document.getElementById('adm-wp-lbl').textContent  = name;
   closeModal(); toast('Workplace updated!','ok');
+}
+
+function normalizeInviteCode(value) {
+  const raw = (value || '').trim();
+  if (!raw) return '';
+  try {
+    const u = new URL(raw);
+    return (u.searchParams.get('invite') || raw).trim();
+  } catch {
+    return raw;
+  }
+}
+
+function applyInviteFromUrl() {
+  const invite = new URLSearchParams(window.location.search).get('invite');
+  if (!invite) return;
+  const inviteEl = document.getElementById('s-invite');
+  if (inviteEl) inviteEl.value = invite;
+  const userRole = document.getElementById('r-user');
+  if (userRole) userRole.checked = true;
+  roleChange();
+  authTab('signup');
+}
+
+async function copyInviteCode() {
+  const v = document.getElementById('adm-invite-code').value;
+  if (!v) return;
+  try {
+    await navigator.clipboard.writeText(v);
+    toast('Invite code copied!', 'ok');
+  } catch {
+    toast('Unable to copy. You can select and copy manually.', 'er');
+  }
+}
+
+async function copyInviteLink() {
+  const v = document.getElementById('adm-invite-link').value;
+  if (!v) return;
+  try {
+    await navigator.clipboard.writeText(v);
+    toast('Invite link copied!', 'ok');
+  } catch {
+    toast('Unable to copy. You can select and copy manually.', 'er');
+  }
 }
 
 /* ═══════════════════════════════════════════════
