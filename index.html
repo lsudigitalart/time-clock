@@ -814,7 +814,8 @@ async function doResetPassword() {
   if (error) {
     const msg = (error.message || '').toLowerCase();
     if (msg.includes('rate limit')) {
-      errEl.textContent = 'Too many reset emails were requested. Please wait a minute and try again.';
+      const detail = error.message ? ` (${error.message})` : '';
+      errEl.textContent = 'Too many reset emails were requested. Please wait 10-60 seconds and try again.' + detail;
     } else {
       errEl.textContent = error.message;
     }
