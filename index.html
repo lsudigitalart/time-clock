@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PunchCard — Workforce Time Tracking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+/* ─── VARIABLES ──────────────────────────────────────────── */
+:root {
+  --bg:       #0a0b10;
+  --bg2:      #10121a;
+  --surface:  #151820;
+  --surface2: #1c1f2c;
+  --border:   #252838;
+  --border2:  #32364e;
+  --amber:    #e8942a;
+  --amber-lo: #b87020;
+  --amber-gl: rgba(232,148,42,.14);
+  --green:    #22c55e;
+  --red:      #ef4444;
+  --blue:     #3b82f6;
+  --text:     #dde0ef;
+  --text2:    #9fa5c0;
+  --muted:    #555b7a;
+  --ff-disp:  'Oxanium', monospace;
+  --ff-body:  'IBM Plex Sans', sans-serif;
+  --ff-mono:  'IBM Plex Mono', monospace;
+  --r:        6px;
+  --r-lg:     12px;
+  --ease:     150ms ease;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--ff-body);background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font-family:var(--ff-body);cursor:pointer}
+input,select,textarea{font-family:var(--ff-body)}
+h1,h2,h3,h4{font-family:var(--ff-disp);letter-spacing:.02em}
+
+/* ─── LAYOUT ─────────────────────────────────────────────── */
+#auth-wrap {
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;
+  background:
+    radial-gradient(ellipse 80% 60% at 15% 100%, rgba(232,148,42,.07) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 90% 0%,   rgba(59,130,246,.04) 0%, transparent 50%),
+    var(--bg);
+}
+#app-wrap{display:none;min-height:100vh;flex-direction:column}
+#app-wrap.on{display:flex}
+
+/* ─── NAV ────────────────────────────────────────────────── */
+#nav{
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:0 1.75rem;display:flex;align-items:center;justify-content:space-between;
+  height:58px;position:sticky;top:0;z-index:100;gap:1rem;
+}
+.nav-logo{font-family:var(--ff-disp);font-size:1.3rem;font-weight:800;color:var(--amber);
+  letter-spacing:.06em;display:flex;align-items:center;gap:.5rem;flex-shrink:0}
+.nav-logo-box{width:26px;height:26px;border:2px solid var(--amber);border-radius:4px;
+  display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800}
+.nav-links{display:flex;align-items:center;gap:.15rem;flex:1;justify-content:center}
+.nav-btn{padding:.38rem .85rem;border-radius:var(--r);font-size:.84rem;font-weight:600;
+  color:var(--muted);background:none;border:none;transition:color var(--ease),background var(--ease);
+  font-family:var(--ff-disp);letter-spacing:.04em}
+.nav-btn:hover{color:var(--text);background:var(--surface)}
+.nav-btn.on{color:var(--amber);background:var(--amber-gl)}
+.nav-right{display:flex;align-items:center;gap:.75rem;flex-shrink:0}
+.nav-wp{font-size:.72rem;color:var(--muted);font-family:var(--ff-mono);
+  display:flex;align-items:center;gap:.4rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav-wp::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);flex-shrink:0}
+
+/* ─── MAIN & PAGES ───────────────────────────────────────── */
+main{flex:1;overflow-y:auto}
+.page{display:none;padding:2rem;max-width:1100px;margin:0 auto;width:100%}
+.page.on{display:block}
+
+/* ─── AUTH CARD ──────────────────────────────────────────── */
+.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);width:100%;max-width:440px;overflow:hidden}
+.auth-hd{padding:2rem 2rem 0;text-align:center}
+.auth-logo{font-family:var(--ff-disp);font-size:2rem;font-weight:800;color:var(--amber);letter-spacing:.06em;margin-bottom:.2rem}
+.auth-tag{font-size:.72rem;color:var(--muted);font-family:var(--ff-mono);letter-spacing:.12em;text-transform:uppercase;margin-bottom:1.5rem}
+.auth-tabs{display:flex;border-bottom:1px solid var(--border)}
+.auth-tab{flex:1;padding:.8rem;background:none;border:none;color:var(--muted);font-size:.875rem;
+  font-weight:600;font-family:var(--ff-disp);cursor:pointer;border-bottom:2px solid transparent;
+  margin-bottom:-1px;letter-spacing:.05em;transition:all var(--ease)}
+.auth-tab.on{color:var(--amber);border-bottom-color:var(--amber)}
+.auth-form{padding:1.75rem 2rem 2rem;display:none}
+.auth-form.on{display:block}
+
+/* ─── FORM ───────────────────────────────────────────────── */
+.fld{margin-bottom:1rem}
+.lbl{display:block;font-size:.7rem;font-weight:700;color:var(--text2);letter-spacing:.09em;
+  text-transform:uppercase;font-family:var(--ff-mono);margin-bottom:.4rem}
+.inp{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  padding:.6rem .85rem;color:var(--text);font-size:.9rem;transition:border-color var(--ease),box-shadow var(--ease);outline:none}
+.inp:focus{border-color:var(--amber);box-shadow:0 0 0 3px var(--amber-gl)}
+.inp::placeholder{color:var(--muted)}
+select.inp{cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath fill='%23555b7a' d='M5 6L0 0h10z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right .85rem center;padding-right:2.5rem}
+.hint{font-size:.73rem;color:var(--muted);margin-top:.3rem}
+.err-msg{font-size:.8rem;color:var(--red);padding:.5rem .75rem;background:rgba(239,68,68,.08);
+  border:1px solid rgba(239,68,68,.2);border-radius:var(--r);margin-bottom:.75rem;display:none}
+.ok-msg{font-size:.8rem;color:var(--green);padding:.5rem .75rem;background:rgba(34,197,94,.08);
+  border:1px solid rgba(34,197,94,.2);border-radius:var(--r);margin-bottom:.75rem;display:none}
+.err-msg.on,.ok-msg.on{display:block}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+
+/* ─── ROLE PICKER ────────────────────────────────────────── */
+.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem}
+.role-inp{display:none}
+.role-lbl{display:block;padding:.75rem;border:1px solid var(--border);border-radius:var(--r);
+  cursor:pointer;text-align:center;transition:all var(--ease);background:var(--bg2)}
+.role-lbl:hover{border-color:var(--border2)}
+.role-inp:checked+.role-lbl{border-color:var(--amber);background:var(--amber-gl);color:var(--amber)}
+.role-icon{font-size:1.2rem;display:block;margin-bottom:.2rem}
+.role-name{font-size:.78rem;font-weight:700;font-family:var(--ff-disp);letter-spacing:.05em}
+
+/* ─── BUTTONS ────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
+  padding:.6rem 1.2rem;border-radius:var(--r);font-size:.875rem;font-weight:700;
+  border:none;cursor:pointer;transition:all var(--ease);font-family:var(--ff-disp);
+  letter-spacing:.04em;white-space:nowrap}
+.btn-primary{background:var(--amber);color:#08090e}
+.btn-primary:hover{background:#f5a43a;transform:translateY(-1px);box-shadow:0 4px 20px rgba(232,148,42,.35)}
+.btn-primary:active{transform:none}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--border)}
+.btn-danger{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+.btn-danger:hover{background:rgba(239,68,68,.22)}
+.btn-success{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+.btn-success:hover{background:rgba(34,197,94,.22)}
+.btn-ghost{background:none;color:var(--text2);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn-full{width:100%}
+.btn-sm{padding:.35rem .75rem;font-size:.78rem}
+.btn-lg{padding:.85rem 2rem;font-size:1rem}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+
+/* ─── CARDS ──────────────────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.5rem}
+.card-title{font-family:var(--ff-disp);font-size:.7rem;font-weight:800;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:1rem;display:flex;align-items:center;gap:.5rem}
+.card-dot{width:5px;height:5px;background:var(--amber);border-radius:50%;flex-shrink:0}
+
+/* ─── CLOCK WIDGET ───────────────────────────────────────── */
+.clock-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
+  padding:2.5rem 2rem;text-align:center;position:relative;overflow:hidden}
+.clock-card::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 60% 50% at 50% 110%, rgba(232,148,42,.07) 0%, transparent 70%);pointer-events:none}
+.clock-badge{display:inline-flex;align-items:center;gap:.45rem;padding:.3rem .85rem;
+  border-radius:100px;font-size:.68rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  font-family:var(--ff-mono);margin-bottom:1.5rem}
+.badge-out{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.22);color:var(--red)}
+.badge-in {background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.22); color:var(--green)}
+.s-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.s-dot.pulse{animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}
+.clock-digits{font-family:var(--ff-mono);font-size:3.8rem;font-weight:600;color:var(--amber);
+  letter-spacing:.04em;line-height:1;margin-bottom:.4rem}
+.clock-sub{font-size:.72rem;color:var(--muted);font-family:var(--ff-mono);letter-spacing:.1em;margin-bottom:.3rem}
+.clock-since{font-size:.8rem;color:var(--text2);font-family:var(--ff-mono);margin-bottom:1.5rem;min-height:1.2rem}
+.clock-btns{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap}
+.aco-strip{margin-top:1rem;font-size:.72rem;color:var(--muted);font-family:var(--ff-mono);
+  letter-spacing:.06em;display:none}
+.aco-strip.on{display:block}
+
+/* ─── PROGRESS ───────────────────────────────────────────── */
+.prog-wrap{background:var(--surface2);border-radius:100px;height:8px;overflow:hidden;margin:.7rem 0}
+.prog-bar{height:100%;border-radius:100px;
+  background:linear-gradient(90deg,var(--amber-lo),var(--amber));
+  transition:width .7s cubic-bezier(.34,1.56,.64,1);position:relative}
+.prog-bar::after{content:'';position:absolute;top:0;right:0;bottom:0;width:16px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.2));border-radius:100px}
+.prog-labels{display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);font-family:var(--ff-mono)}
+.prog-big{font-family:var(--ff-mono);font-size:1.9rem;font-weight:600;color:var(--text);letter-spacing:-.01em}
+.prog-unit{font-size:.85rem;color:var(--muted);font-family:var(--ff-mono)}
+
+/* ─── STATS ──────────────────────────────────────────────── */
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.25rem 1.4rem}
+.stat-lbl{font-size:.68rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-family:var(--ff-mono);margin-bottom:.4rem}
+.stat-val{font-family:var(--ff-mono);font-size:1.7rem;font-weight:600;color:var(--text);line-height:1}
+.stat-sub{font-size:.73rem;color:var(--text2);margin-top:.3rem;font-family:var(--ff-mono)}
+
+/* ─── TABLE ──────────────────────────────────────────────── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:.68rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);font-family:var(--ff-mono);padding:.55rem .85rem;border-bottom:1px solid var(--border)}
+td{padding:.75rem .85rem;font-size:.875rem;border-bottom:1px solid var(--border);color:var(--text2)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.015)}
+.td-hi{color:var(--text);font-family:var(--ff-mono);font-size:.82rem}
+.td-mono{font-family:var(--ff-mono);font-size:.8rem}
+
+/* ─── BADGE ──────────────────────────────────────────────── */
+.badge{display:inline-flex;align-items:center;gap:.25rem;padding:.18rem .55rem;border-radius:100px;
+  font-size:.67rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-family:var(--ff-mono)}
+.bg{background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.2)}
+.br{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2)}
+.ba{background:rgba(232,148,42,.1);color:var(--amber);border:1px solid rgba(232,148,42,.2)}
+.bb{background:rgba(59,130,246,.1);color:var(--blue);border:1px solid rgba(59,130,246,.2)}
+.bm{background:rgba(90,91,122,.1);color:var(--muted);border:1px solid rgba(90,91,122,.2)}
+
+/* ─── MODAL ──────────────────────────────────────────────── */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);
+  display:none;align-items:center;justify-content:center;z-index:1000;padding:1rem}
+#overlay.on{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r-lg);
+  padding:2rem;width:100%;max-width:480px;position:relative;
+  animation:mIn 220ms cubic-bezier(.34,1.56,.64,1)}
+@keyframes mIn{from{opacity:0;transform:scale(.94) translateY(10px)}to{opacity:1;transform:none}}
+.m-title{font-family:var(--ff-disp);font-size:1.05rem;font-weight:800;letter-spacing:.04em;margin-bottom:1.5rem}
+.m-close{position:absolute;top:1rem;right:1rem;background:none;border:none;color:var(--muted);
+  font-size:1.1rem;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;
+  justify-content:center;border-radius:var(--r);transition:all var(--ease)}
+.m-close:hover{background:var(--surface2);color:var(--text)}
+.m-footer{display:flex;gap:.75rem;margin-top:1.5rem;justify-content:flex-end}
+
+/* ─── AUTO CLOCKOUT ──────────────────────────────────────── */
+.aco-tabs{display:flex;gap:.4rem;margin-bottom:.75rem}
+.aco-tab{flex:1;padding:.45rem;background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);color:var(--muted);font-size:.78rem;cursor:pointer;
+  font-family:var(--ff-disp);transition:all var(--ease);letter-spacing:.04em;font-weight:600}
+.aco-tab.on{border-color:var(--amber);color:var(--amber);background:var(--amber-gl)}
+.aco-panel{display:none}
+.aco-panel.on{display:block}
+
+/* ─── PAGE HEADER ────────────────────────────────────────── */
+.ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.75rem;flex-wrap:wrap;gap:1rem}
+.ph-title{font-family:var(--ff-disp);font-size:1.55rem;font-weight:800;letter-spacing:.04em}
+.ph-sub{font-size:.78rem;color:var(--muted);font-family:var(--ff-mono);margin-top:.2rem}
+
+/* ─── GRID ───────────────────────────────────────────────── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.2rem}
+.dash-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:1.2rem;margin-bottom:1.2rem}
+.sec{margin-bottom:1.4rem}
+.gap2{display:flex;gap:.5rem}
+.gap3{display:flex;gap:.75rem}
+
+/* ─── EMPLOYEE ROW ───────────────────────────────────────── */
+.emp-row{display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center;
+  padding:.85rem 1rem;border-bottom:1px solid var(--border)}
+.emp-row:last-child{border-bottom:none}
+.emp-name{font-weight:600;color:var(--text);font-family:var(--ff-disp);letter-spacing:.03em;font-size:.9rem}
+.emp-role{font-size:.72rem;color:var(--muted);font-family:var(--ff-mono);margin-top:.1rem}
+.emp-hrs{text-align:right}
+.emp-hrs-val{font-family:var(--ff-mono);font-size:1rem;font-weight:600;color:var(--text)}
+.emp-hrs-sub{font-size:.7rem;color:var(--muted);font-family:var(--ff-mono)}
+
+/* ─── EMPTY STATE ────────────────────────────────────────── */
+.empty{text-align:center;padding:2.5rem;color:var(--muted)}
+.empty-icon{font-size:2rem;margin-bottom:.6rem;opacity:.45}
+.empty-txt{font-size:.85rem}
+
+/* ─── TOAST ──────────────────────────────────────────────── */
+#toasts{position:fixed;bottom:1.5rem;right:1.5rem;display:flex;flex-direction:column;gap:.5rem;z-index:9999}
+.toast{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);
+  padding:.7rem 1rem;font-size:.84rem;display:flex;align-items:center;gap:.55rem;
+  animation:tIn 200ms ease;max-width:300px;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+@keyframes tIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.toast.ok{border-left:3px solid var(--green)}
+.toast.er{border-left:3px solid var(--red)}
+.toast.inf{border-left:3px solid var(--amber)}
+
+/* ─── MISC ───────────────────────────────────────────────── */
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--border2);
+  border-top-color:var(--amber);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.week-range{font-size:.72rem;color:var(--muted);font-family:var(--ff-mono);margin-top:.15rem}
+.divider{border:none;border-top:1px solid var(--border);margin:1.25rem 0}
+.hidden{display:none!important}
+.text-amber{color:var(--amber)}
+.text-green{color:var(--green)}
+.text-red{color:var(--red)}
+.mb1{margin-bottom:.5rem}
+.mb2{margin-bottom:1rem}
+.mb3{margin-bottom:1.5rem}
+.flex-center{display:flex;align-items:center}
+.jb{justify-content:space-between}
+
+/* ─── RESPONSIVE ─────────────────────────────────────────── */
+@media(max-width:768px){
+  .dash-grid{grid-template-columns:1fr}
+  .g2{grid-template-columns:1fr}
+  .g3{grid-template-columns:1fr 1fr}
+  .page{padding:1rem}
+  .clock-digits{font-size:2.8rem}
+  .nav-links{gap:0}
+  .nav-btn{padding:.38rem .55rem;font-size:.78rem}
+  .clock-card{padding:2rem 1rem}
+}
+@media(max-width:480px){
+  .g3{grid-template-columns:1fr}
+  #nav{padding:0 1rem}
+  .nav-logo span{display:none}
+}
+  </style>
+</head>
+<body>
+
+<!-- ─── AUTH ──────────────────────────────────────────────── -->
+<div id="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-hd">
+      <div class="auth-logo">⏱ PUNCHCARD</div>
+      <div class="auth-tag">Workforce Time Tracking</div>
+      <div class="auth-tabs">
+        <button class="auth-tab on"  onclick="authTab('login')">Sign In</button>
+        <button class="auth-tab"     onclick="authTab('signup')">Sign Up</button>
+      </div>
+    </div>
+
+    <!-- LOGIN -->
+    <form class="auth-form on" id="f-login" onsubmit="doLogin(event)">
+      <div class="fld"><label class="lbl">Email</label>
+        <input type="email" id="l-email" class="inp" placeholder="you@company.com" required></div>
+      <div class="fld"><label class="lbl">Password</label>
+        <input type="password" id="l-pass" class="inp" placeholder="••••••••" required></div>
+      <div id="l-err" class="err-msg"></div>
+      <button type="submit" class="btn btn-primary btn-full btn-lg" id="l-btn">Sign In</button>
+      <p class="hint" style="text-align:center;margin-top:1rem">
+        No account? <a href="#" onclick="authTab('signup');return false" style="color:var(--amber)">Create one</a>
+      </p>
+    </form>
+
+    <!-- SIGNUP -->
+    <form class="auth-form" id="f-signup" onsubmit="doSignup(event)">
+      <div class="fld"><label class="lbl">Full Name</label>
+        <input type="text" id="s-name" class="inp" placeholder="Jane Smith" required></div>
+      <div class="fld"><label class="lbl">Email</label>
+        <input type="email" id="s-email" class="inp" placeholder="you@company.com" required></div>
+      <div class="fld"><label class="lbl">Password</label>
+        <input type="password" id="s-pass" class="inp" placeholder="Min 6 characters" required minlength="6"></div>
+
+      <div class="fld">
+        <label class="lbl">Account Type</label>
+        <div class="role-grid">
+          <input type="radio" name="role" id="r-user" value="user" class="role-inp" checked onchange="roleChange()">
+          <label class="role-lbl" for="r-user"><span class="role-icon">👤</span><span class="role-name">Employee</span></label>
+          <input type="radio" name="role" id="r-admin" value="admin" class="role-inp" onchange="roleChange()">
+          <label class="role-lbl" for="r-admin"><span class="role-icon">🏢</span><span class="role-name">Admin</span></label>
+        </div>
+      </div>
+
+      <div id="emp-fields">
+        <div class="fld"><label class="lbl">Join Workplace</label>
+          <select id="s-wp" class="inp"><option value="">— Select a workplace —</option></select>
+          <p class="hint">Select the workplace you're joining</p>
+        </div>
+      </div>
+
+      <div id="adm-fields" class="hidden">
+        <div class="fld"><label class="lbl">Workplace Name</label>
+          <input type="text" id="s-wp-name" class="inp" placeholder="Acme Corp">
+          <p class="hint">You'll be the admin of this workplace</p>
+        </div>
+      </div>
+
+      <div id="s-err" class="err-msg"></div>
+      <div id="s-ok"  class="ok-msg"></div>
+      <button type="submit" class="btn btn-primary btn-full btn-lg" id="s-btn">Create Account</button>
+    </form>
+  </div>
+</div>
+
+<!-- ─── APP ───────────────────────────────────────────────── -->
+<div id="app-wrap">
+  <nav id="nav">
+    <div class="nav-logo">
+      <div class="nav-logo-box">P</div>
+      <span>PUNCHCARD</span>
+    </div>
+    <div class="nav-links" id="nav-links">
+      <button class="nav-btn on" onclick="goto('dashboard')" data-p="dashboard">Dashboard</button>
+      <button class="nav-btn"    onclick="goto('history')"   data-p="history">History</button>
+      <button class="nav-btn"    onclick="goto('timeoff')"   data-p="timeoff">Time Off</button>
+      <button class="nav-btn hidden" onclick="goto('admin')" data-p="admin" id="nav-admin">Admin</button>
+    </div>
+    <div class="nav-right">
+      <div class="nav-wp" id="nav-wp-name"></div>
+      <button class="btn btn-ghost btn-sm" onclick="doSignout()">Sign Out</button>
+    </div>
+  </nav>
+
+  <main>
+    <!-- DASHBOARD -->
+    <div id="page-dashboard" class="page on">
+      <div class="ph">
+        <div>
+          <div class="ph-title" id="greeting">Welcome back</div>
+          <div class="ph-sub"  id="cur-date"></div>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <!-- Clock -->
+        <div class="clock-card">
+          <div id="cl-badge" class="clock-badge badge-out">
+            <div class="s-dot"></div><span>Clocked Out</span>
+          </div>
+          <div class="clock-digits" id="cl-digits">00:00:00</div>
+          <div class="clock-sub">ELAPSED TIME</div>
+          <div class="clock-since" id="cl-since"></div>
+          <div class="clock-btns">
+            <button class="btn btn-primary btn-lg" id="btn-in"  onclick="openClockInModal()">Clock In</button>
+            <button class="btn btn-danger  btn-lg hidden" id="btn-out" onclick="doClockOut()">Clock Out</button>
+          </div>
+          <div class="aco-strip" id="aco-strip">
+            AUTO CLOCKOUT AT <span id="aco-disp" style="color:var(--amber)"></span>
+          </div>
+        </div>
+
+        <!-- Week Progress -->
+        <div>
+          <div class="card mb2">
+            <div class="card-title"><div class="card-dot"></div> This Week</div>
+            <div>
+              <span class="prog-big" id="wk-done">0</span>
+              <span class="prog-unit"> / </span>
+              <span class="prog-big" id="wk-total">40</span>
+              <span class="prog-unit"> hrs</span>
+            </div>
+            <div class="week-range" id="wk-range"></div>
+            <div class="prog-wrap"><div class="prog-bar" id="wk-bar" style="width:0%"></div></div>
+            <div class="prog-labels">
+              <span id="wk-pct">0% complete</span>
+              <span id="wk-rem">40 hrs left</span>
+            </div>
+          </div>
+          <div class="g2">
+            <div class="stat-card">
+              <div class="stat-lbl">Today</div>
+              <div class="stat-val" id="st-today">0.0h</div>
+              <div class="stat-sub">hours worked</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-lbl">This Month</div>
+              <div class="stat-val" id="st-month">0.0h</div>
+              <div class="stat-sub">hours worked</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent -->
+      <div class="card sec">
+        <div class="card-title"><div class="card-dot"></div> Recent Activity</div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Date</th><th>In</th><th>Out</th><th>Duration</th><th>Notes</th></tr></thead>
+          <tbody id="tb-recent"><tr><td colspan="5"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No entries yet</div></div></td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div id="page-history" class="page">
+      <div class="ph">
+        <div><div class="ph-title">Time History</div><div class="ph-sub">All clock-in/out records &amp; time off</div></div>
+        <select id="hist-month" class="inp" style="width:auto;padding:.4rem 2.2rem .4rem .75rem" onchange="loadHistory()"></select>
+      </div>
+      <div class="card">
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Date</th><th>In</th><th>Out</th><th>Duration</th><th>Notes / Reason</th><th>Type</th></tr></thead>
+          <tbody id="tb-hist"><tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No records</div></div></td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- TIME OFF -->
+    <div id="page-timeoff" class="page">
+      <div class="ph">
+        <div><div class="ph-title">Time Off</div><div class="ph-sub">Request and track time off</div></div>
+        <button class="btn btn-primary" onclick="openTimeOffModal()">+ Request Time Off</button>
+      </div>
+      <div class="card">
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Date</th><th>Hours</th><th>Reason</th><th>Notes</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="tb-to"><tr><td colspan="6"><div class="empty"><div class="empty-icon">🌴</div><div class="empty-txt">No requests yet</div></div></td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- ADMIN -->
+    <div id="page-admin" class="page">
+      <div class="ph">
+        <div><div class="ph-title">Admin Panel</div><div class="ph-sub" id="adm-wp-lbl"></div></div>
+        <button class="btn btn-ghost btn-sm" onclick="openEditWpModal()">Edit Workplace</button>
+      </div>
+
+      <div class="g2 mb3">
+        <div class="card">
+          <div class="card-title"><div class="card-dot"></div> Weekly Schedule</div>
+          <div class="mb2">
+            <div class="stat-val" id="adm-sched">40</div>
+            <div class="stat-sub">hours/week target</div>
+          </div>
+          <div class="flex-center gap2">
+            <input type="number" id="adm-hrs-inp" class="inp" style="width:90px" placeholder="40" min="1" max="168">
+            <button class="btn btn-primary btn-sm" onclick="saveSchedule()">Update</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><div class="card-dot"></div> Workplace Stats</div>
+          <div class="g2">
+            <div>
+              <div class="stat-lbl" style="margin-bottom:.25rem">Employees</div>
+              <div class="stat-val" style="font-size:1.5rem" id="adm-emp-cnt">0</div>
+            </div>
+            <div>
+              <div class="stat-lbl" style="margin-bottom:.25rem">Week Total</div>
+              <div class="stat-val" style="font-size:1.5rem" id="adm-wk-hrs">0h</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card sec">
+        <div class="card-title flex-center jb" style="margin-bottom:1rem">
+          <div class="flex-center gap2"><div class="card-dot"></div> Employees</div>
+          <button class="btn btn-ghost btn-sm" onclick="loadAdminPage()">↺ Refresh</button>
+        </div>
+        <div id="adm-emp-list"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet</div></div></div>
+      </div>
+
+      <div class="card sec">
+        <div class="card-title"><div class="card-dot"></div> Time Off Requests</div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Employee</th><th>Date</th><th>Hours</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="tb-adm-to"><tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No requests</div></div></td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ─── MODALS ────────────────────────────────────────────── -->
+<div id="overlay" onclick="overlayClick(event)">
+
+  <!-- Clock In -->
+  <div class="modal" id="m-clockin">
+    <button class="m-close" onclick="closeModal()">✕</button>
+    <div class="m-title">🟢 Clock In</div>
+    <div class="fld">
+      <label class="lbl">Notes (optional)</label>
+      <input type="text" id="ci-notes" class="inp" placeholder="What are you working on?">
+    </div>
+    <div class="fld">
+      <label class="lbl">Auto Clock-Out</label>
+      <div class="aco-tabs">
+        <button type="button" class="aco-tab on" onclick="acoMode('none',this)">None</button>
+        <button type="button" class="aco-tab"    onclick="acoMode('hours',this)">After Hours</button>
+        <button type="button" class="aco-tab"    onclick="acoMode('time',this)">At Time</button>
+      </div>
+      <div class="aco-panel on" id="acp-none"><p class="hint">Clock out manually when you're done.</p></div>
+      <div class="aco-panel"    id="acp-hours">
+        <input type="number" id="aco-h" class="inp" placeholder="8" min=".5" max="24" step=".5">
+        <p class="hint">Auto clock out after this many hours</p>
+      </div>
+      <div class="aco-panel"    id="acp-time">
+        <input type="time" id="aco-t" class="inp">
+        <p class="hint">Auto clock out at this specific time</p>
+      </div>
+    </div>
+    <div class="m-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doClockIn()">Clock In Now</button>
+    </div>
+  </div>
+
+  <!-- Time Off -->
+  <div class="modal hidden" id="m-timeoff">
+    <button class="m-close" onclick="closeModal()">✕</button>
+    <div class="m-title">🌴 Request Time Off</div>
+    <div class="fld"><label class="lbl">Date</label>
+      <input type="date" id="to-date" class="inp" required></div>
+    <div class="frow mb2">
+      <div class="fld mb1"><label class="lbl">Hours</label>
+        <input type="number" id="to-hrs" class="inp" value="8" min=".5" max="24" step=".5"></div>
+      <div class="fld mb1"><label class="lbl">Reason</label>
+        <select id="to-reason" class="inp">
+          <option>Vacation</option><option>Sick Leave</option>
+          <option>Personal</option><option>Holiday</option><option>Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="fld"><label class="lbl">Additional Notes (optional)</label>
+      <input type="text" id="to-notes" class="inp" placeholder="Any details..."></div>
+    <div class="m-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitTimeOff()">Submit Request</button>
+    </div>
+  </div>
+
+  <!-- Edit Workplace -->
+  <div class="modal hidden" id="m-wp">
+    <button class="m-close" onclick="closeModal()">✕</button>
+    <div class="m-title">🏢 Edit Workplace</div>
+    <div class="fld"><label class="lbl">Workplace Name</label>
+      <input type="text" id="wp-name-inp" class="inp"></div>
+    <div class="m-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveWorkplace()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<!-- ─── SCRIPT ────────────────────────────────────────────── -->
+<script>
+/* ═══════════════════════════════════════════════
+   CONFIG — Replace with your Supabase credentials
+   ═══════════════════════════════════════════════ */
+const SB_URL  = 'YOUR_SUPABASE_URL';
+const SB_KEY  = 'YOUR_SUPABASE_ANON_KEY';
+
+/* ─── Supabase client ─────────────────────────── */
+const sb = supabase.createClient(SB_URL, SB_KEY);
+
+/* ─── App state ───────────────────────────────── */
+const S = {
+  user: null, profile: null, workplace: null,
+  entry: null,               // active clock-in entry
+  clockTick: null,           // setInterval for elapsed display
+  acoTimer: null,            // setTimeout for auto clock-out
+  acoActiveMode: 'none',
+};
+
+/* ═══════════════════════════════════════════════
+   INIT
+   ═══════════════════════════════════════════════ */
+async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) await onLogin(session.user);
+
+  sb.auth.onAuthStateChange(async (ev, sess) => {
+    if (ev === 'SIGNED_IN'  && sess) await onLogin(sess.user);
+    if (ev === 'SIGNED_OUT')         onLogout();
+  });
+
+  await fetchWorkplacesForDropdown();
+  setDate();
+  setInterval(setDate, 60000);
+  buildMonthFilter();
+}
+
+function setDate() {
+  const el = document.getElementById('cur-date');
+  if (el) el.textContent = new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+}
+
+/* ═══════════════════════════════════════════════
+   AUTH
+   ═══════════════════════════════════════════════ */
+function authTab(t) {
+  document.querySelectorAll('.auth-tab').forEach((el,i)=> el.classList.toggle('on',(t==='login'?i===0:i===1)));
+  document.getElementById('f-login').classList.toggle('on',  t==='login');
+  document.getElementById('f-signup').classList.toggle('on', t==='signup');
+}
+
+function roleChange() {
+  const isAdmin = document.getElementById('r-admin').checked;
+  document.getElementById('emp-fields').classList.toggle('hidden', isAdmin);
+  document.getElementById('adm-fields').classList.toggle('hidden', !isAdmin);
+}
+
+async function fetchWorkplacesForDropdown() {
+  const { data } = await sb.from('workplaces').select('id,name').order('name');
+  const sel = document.getElementById('s-wp');
+  const first = sel.options[0];
+  sel.innerHTML = ''; sel.appendChild(first);
+  (data || []).forEach(w => {
+    const o = document.createElement('option');
+    o.value = w.id; o.textContent = w.name; sel.appendChild(o);
+  });
+}
+
+async function doSignup(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('s-err');
+  const okEl  = document.getElementById('s-ok');
+  const btn   = document.getElementById('s-btn');
+  errEl.classList.remove('on'); okEl.classList.remove('on');
+
+  const name = document.getElementById('s-name').value.trim();
+  const email= document.getElementById('s-email').value.trim();
+  const pass = document.getElementById('s-pass').value;
+  const role = document.querySelector('input[name="role"]:checked').value;
+
+  if (role === 'user' && !document.getElementById('s-wp').value) {
+    errEl.textContent = 'Please select a workplace.'; errEl.classList.add('on'); return;
+  }
+  if (role === 'admin' && !document.getElementById('s-wp-name').value.trim()) {
+    errEl.textContent = 'Please enter a workplace name.'; errEl.classList.add('on'); return;
+  }
+
+  btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Creating…';
+
+  const meta = {
+    full_name: name, role,
+    ...(role === 'user'  && { workplace_id:   document.getElementById('s-wp').value }),
+    ...(role === 'admin' && { workplace_name: document.getElementById('s-wp-name').value.trim() }),
+  };
+
+  const { data, error } = await sb.auth.signUp({ email, password: pass, options: { data: meta } });
+  btn.disabled = false; btn.textContent = 'Create Account';
+
+  if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
+
+  if (data.session) {
+    // Immediate sign-in (email confirmation disabled)
+  } else {
+    okEl.textContent = '✓ Check your email to confirm, then sign in!'; okEl.classList.add('on');
+  }
+}
+
+async function doLogin(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('l-err');
+  const btn   = document.getElementById('l-btn');
+  errEl.classList.remove('on');
+
+  btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Signing in…';
+  const { error } = await sb.auth.signInWithPassword({
+    email:    document.getElementById('l-email').value.trim(),
+    password: document.getElementById('l-pass').value,
+  });
+  btn.disabled = false; btn.textContent = 'Sign In';
+  if (error) { errEl.textContent = error.message; errEl.classList.add('on'); }
+}
+
+async function onLogin(user) {
+  S.user = user;
+
+  // Load or create profile (trigger may have already created it)
+  let { data: prof } = await sb.from('profiles').select('*').eq('id', user.id).single();
+  if (!prof) {
+    const m = user.user_metadata || {};
+    const { data: np } = await sb.from('profiles').insert({
+      id: user.id, full_name: m.full_name || user.email, role: m.role || 'user'
+    }).select().single();
+    prof = np;
+  }
+  S.profile = prof;
+
+  // Setup workspace membership if first login
+  const { data: membership } = await sb.from('workplace_members')
+    .select('id').eq('user_id', user.id).limit(1);
+
+  if (!membership || membership.length === 0) {
+    const m = user.user_metadata || {};
+    if (prof?.role === 'admin' && m.workplace_name) {
+      const { data: wp } = await sb.from('workplaces').insert({
+        name: m.workplace_name, admin_id: user.id, hours_per_week: 40
+      }).select().single();
+      if (wp) await sb.from('workplace_members').insert({ workplace_id: wp.id, user_id: user.id, role: 'admin' });
+    } else if (prof?.role === 'user' && m.workplace_id) {
+      await sb.from('workplace_members').insert({ workplace_id: m.workplace_id, user_id: user.id, role: 'member' });
+    }
+  }
+
+  await loadWorkplace();
+
+  // Show app
+  document.getElementById('auth-wrap').style.display = 'none';
+  document.getElementById('app-wrap').classList.add('on');
+  document.getElementById('greeting').textContent =
+    `Welcome back, ${prof?.full_name?.split(' ')[0] || 'there'}`;
+
+  if (prof?.role === 'admin') document.getElementById('nav-admin').classList.remove('hidden');
+
+  await loadDashboard();
+}
+
+async function loadWorkplace() {
+  const { data } = await sb.from('workplace_members')
+    .select('*, workplace:workplaces(*)')
+    .eq('user_id', S.user.id).single();
+  if (data?.workplace) {
+    S.workplace = data.workplace;
+    document.getElementById('nav-wp-name').textContent = data.workplace.name;
+  }
+}
+
+function onLogout() {
+  clearInterval(S.clockTick); clearTimeout(S.acoTimer);
+  Object.assign(S, { user:null, profile:null, workplace:null, entry:null, clockTick:null, acoTimer:null });
+  document.getElementById('auth-wrap').style.display = 'flex';
+  document.getElementById('app-wrap').classList.remove('on');
+  document.getElementById('nav-admin').classList.add('hidden');
+  document.getElementById('app-wrap').querySelector('.page.on')?.classList.remove('on');
+  document.getElementById('page-dashboard').classList.add('on');
+  document.querySelectorAll('.nav-btn').forEach((b,i)=> b.classList.toggle('on', i===0));
+}
+
+async function doSignout() {
+  clearInterval(S.clockTick); clearTimeout(S.acoTimer);
+  await sb.auth.signOut();
+}
+
+/* ═══════════════════════════════════════════════
+   DASHBOARD
+   ═══════════════════════════════════════════════ */
+async function loadDashboard() {
+  await loadCurrentEntry();
+  await Promise.all([loadWeekProgress(), loadRecentEntries(), loadTodayHours(), loadMonthHours()]);
+}
+
+async function loadCurrentEntry() {
+  const { data } = await sb.from('time_entries').select('*')
+    .eq('user_id', S.user.id).is('clock_out', null)
+    .order('clock_in', { ascending: false }).limit(1);
+  S.entry = data?.[0] || null;
+  S.entry ? setClockInUI(S.entry) : setClockOutUI();
+}
+
+function setClockInUI(entry) {
+  const badge = document.getElementById('cl-badge');
+  badge.className = 'clock-badge badge-in';
+  badge.innerHTML = '<div class="s-dot pulse"></div><span>Clocked In</span>';
+  document.getElementById('btn-in').classList.add('hidden');
+  document.getElementById('btn-out').classList.remove('hidden');
+
+  const start = new Date(entry.clock_in);
+  document.getElementById('cl-since').textContent = `Since ${fmtTime(start)}`;
+
+  clearInterval(S.clockTick);
+  S.clockTick = setInterval(() => {
+    document.getElementById('cl-digits').textContent = fmtElapsed(Date.now() - start.getTime());
+  }, 1000);
+  document.getElementById('cl-digits').textContent = fmtElapsed(Date.now() - start.getTime());
+
+  if (entry.auto_clockout_at) {
+    const autoAt = new Date(entry.auto_clockout_at);
+    const ms = autoAt.getTime() - Date.now();
+    document.getElementById('aco-strip').classList.add('on');
+    document.getElementById('aco-disp').textContent = fmtTime(autoAt);
+    clearTimeout(S.acoTimer);
+    if (ms <= 0) {
+      performClockOut(); return;
+    }
+    S.acoTimer = setTimeout(async () => {
+      await performClockOut();
+      toast('Auto clocked out!', 'inf');
+    }, ms);
+  } else {
+    document.getElementById('aco-strip').classList.remove('on');
+  }
+}
+
+function setClockOutUI() {
+  const badge = document.getElementById('cl-badge');
+  badge.className = 'clock-badge badge-out';
+  badge.innerHTML = '<div class="s-dot"></div><span>Clocked Out</span>';
+  document.getElementById('btn-in').classList.remove('hidden');
+  document.getElementById('btn-out').classList.add('hidden');
+  document.getElementById('cl-digits').textContent = '00:00:00';
+  document.getElementById('cl-since').textContent = '';
+  document.getElementById('aco-strip').classList.remove('on');
+  clearInterval(S.clockTick); clearTimeout(S.acoTimer);
+}
+
+/* ═══════════════════════════════════════════════
+   CLOCK IN / OUT
+   ═══════════════════════════════════════════════ */
+function openClockInModal() {
+  document.getElementById('ci-notes').value = '';
+  document.getElementById('aco-h').value = '';
+  document.getElementById('aco-t').value = '';
+  acoMode('none', document.querySelector('.aco-tab'));
+  openModal('m-clockin');
+}
+
+function acoMode(mode, btn) {
+  S.acoActiveMode = mode;
+  document.querySelectorAll('.aco-tab').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  ['none','hours','time'].forEach(m => {
+    document.getElementById('acp-' + m).classList.toggle('on', m === mode);
+  });
+}
+
+async function doClockIn() {
+  let autoAt = null;
+  if (S.acoActiveMode === 'hours') {
+    const h = parseFloat(document.getElementById('aco-h').value);
+    if (!h || h <= 0) { toast('Enter valid hours', 'er'); return; }
+    autoAt = new Date(Date.now() + h * 3600000).toISOString();
+  } else if (S.acoActiveMode === 'time') {
+    const t = document.getElementById('aco-t').value;
+    if (!t) { toast('Enter a time', 'er'); return; }
+    const [hh, mm] = t.split(':').map(Number);
+    const now = new Date();
+    let tgt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0);
+    if (tgt <= now) tgt.setDate(tgt.getDate() + 1);
+    autoAt = tgt.toISOString();
+  }
+
+  const { data, error } = await sb.from('time_entries').insert({
+    user_id: S.user.id,
+    workplace_id: S.workplace?.id || null,
+    clock_in: new Date().toISOString(),
+    auto_clockout_at: autoAt,
+    notes: document.getElementById('ci-notes').value.trim() || null,
+  }).select().single();
+
+  if (error) { toast(error.message, 'er'); return; }
+  S.entry = data;
+  closeModal();
+  setClockInUI(data);
+  toast('Clocked in!', 'ok');
+  loadWeekProgress();
+}
+
+async function doClockOut() {
+  if (!S.entry) return;
+  await performClockOut();
+}
+
+async function performClockOut() {
+  if (!S.entry) return;
+  const { error } = await sb.from('time_entries')
+    .update({ clock_out: new Date().toISOString() }).eq('id', S.entry.id);
+  if (error) { toast(error.message, 'er'); return; }
+  S.entry = null;
+  clearInterval(S.clockTick); clearTimeout(S.acoTimer);
+  setClockOutUI();
+  toast('Clocked out!', 'ok');
+  await loadDashboard();
+}
+
+/* ═══════════════════════════════════════════════
+   WEEK PROGRESS
+   ═══════════════════════════════════════════════ */
+async function loadWeekProgress() {
+  const { start, end } = weekRange();
+  document.getElementById('wk-range').textContent =
+    `${start.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+
+  const [{ data: entries }, { data: approved }] = await Promise.all([
+    sb.from('time_entries').select('clock_in,clock_out')
+      .eq('user_id', S.user.id)
+      .gte('clock_in', start.toISOString())
+      .lte('clock_in', end.toISOString())
+      .not('clock_out', 'is', null),
+    sb.from('time_off_requests').select('hours')
+      .eq('user_id', S.user.id).eq('status', 'approved')
+      .gte('date', start.toISOString().split('T')[0])
+      .lte('date', end.toISOString().split('T')[0]),
+  ]);
+
+  let hrs = 0;
+  (entries || []).forEach(e => hrs += (new Date(e.clock_out) - new Date(e.clock_in)) / 3600000);
+  (approved || []).forEach(t => hrs += t.hours);
+  if (S.entry) hrs += (Date.now() - new Date(S.entry.clock_in).getTime()) / 3600000;
+
+  const target = S.workplace?.hours_per_week || 40;
+  const pct    = Math.min((hrs / target) * 100, 100);
+  const rem    = Math.max(target - hrs, 0);
+
+  document.getElementById('wk-done').textContent = hrs.toFixed(1);
+  document.getElementById('wk-total').textContent = target;
+  document.getElementById('wk-bar').style.width = pct + '%';
+  document.getElementById('wk-pct').textContent = pct.toFixed(0) + '% complete';
+  document.getElementById('wk-rem').textContent  = rem.toFixed(1) + ' hrs left';
+}
+
+function weekRange() {
+  const now = new Date(), day = now.getDay();
+  const start = new Date(now);
+  start.setDate(now.getDate() + (day === 0 ? -6 : 1 - day));
+  start.setHours(0,0,0,0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23,59,59,999);
+  return { start, end };
+}
+
+async function loadTodayHours() {
+  const s = new Date(); s.setHours(0,0,0,0);
+  const e = new Date(s); e.setDate(s.getDate()+1);
+  const { data } = await sb.from('time_entries').select('clock_in,clock_out')
+    .eq('user_id',S.user.id).gte('clock_in',s.toISOString()).lt('clock_in',e.toISOString()).not('clock_out','is',null);
+  let h = 0;
+  (data||[]).forEach(x => h += (new Date(x.clock_out)-new Date(x.clock_in))/3600000);
+  if (S.entry) { const cs = new Date(S.entry.clock_in); if (cs>=s) h+=(Date.now()-cs.getTime())/3600000; }
+  document.getElementById('st-today').textContent = h.toFixed(1)+'h';
+}
+
+async function loadMonthHours() {
+  const now = new Date();
+  const s = new Date(now.getFullYear(),now.getMonth(),1);
+  const e = new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59);
+  const { data } = await sb.from('time_entries').select('clock_in,clock_out')
+    .eq('user_id',S.user.id).gte('clock_in',s.toISOString()).lte('clock_in',e.toISOString()).not('clock_out','is',null);
+  let h = 0;
+  (data||[]).forEach(x => h += (new Date(x.clock_out)-new Date(x.clock_in))/3600000);
+  document.getElementById('st-month').textContent = h.toFixed(1)+'h';
+}
+
+async function loadRecentEntries() {
+  const { data } = await sb.from('time_entries').select('*')
+    .eq('user_id',S.user.id).order('clock_in',{ascending:false}).limit(6);
+  const tb = document.getElementById('tb-recent');
+  if (!data?.length) { tb.innerHTML='<tr><td colspan="5"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No entries yet</div></div></td></tr>'; return; }
+  tb.innerHTML = data.map(e => {
+    const ci = new Date(e.clock_in), co = e.clock_out ? new Date(e.clock_out) : null;
+    const dur = co ? fmtDur((co-ci)/3600000) : '<span class="badge bg">Active</span>';
+    return `<tr>
+      <td class="td-hi">${ci.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td>
+      <td class="td-mono">${fmtTime(ci)}</td>
+      <td class="td-mono">${co ? fmtTime(co) : '—'}</td>
+      <td class="td-mono">${dur}</td>
+      <td style="color:var(--text2)">${e.notes || '<span style="color:var(--muted)">—</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════════
+   HISTORY
+   ═══════════════════════════════════════════════ */
+function buildMonthFilter() {
+  const sel = document.getElementById('hist-month');
+  const now = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const o = document.createElement('option');
+    o.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    o.textContent = d.toLocaleDateString('en-US',{year:'numeric',month:'long'});
+    if (i===0) o.selected = true;
+    sel.appendChild(o);
+  }
+}
+
+async function loadHistory() {
+  const [yr, mo] = document.getElementById('hist-month').value.split('-').map(Number);
+  const s = new Date(yr, mo-1, 1), e = new Date(yr, mo, 0, 23, 59, 59);
+
+  const [{ data: entries }, { data: tos }] = await Promise.all([
+    sb.from('time_entries').select('*').eq('user_id',S.user.id)
+      .gte('clock_in',s.toISOString()).lte('clock_in',e.toISOString())
+      .order('clock_in',{ascending:false}),
+    sb.from('time_off_requests').select('*').eq('user_id',S.user.id)
+      .gte('date',s.toISOString().split('T')[0]).lte('date',e.toISOString().split('T')[0])
+      .order('date',{ascending:false}),
+  ]);
+
+  const tb = document.getElementById('tb-hist');
+  if (!entries?.length && !tos?.length) {
+    tb.innerHTML='<tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No records this month</div></div></td></tr>'; return;
+  }
+
+  const rows = [
+    ...(entries||[]).map(e=>({t:'clock', d:e, ts:new Date(e.clock_in)})),
+    ...(tos||[]).map(t=>({t:'to', d:t, ts:new Date(t.date+'T12:00')})),
+  ].sort((a,b)=>b.ts-a.ts);
+
+  tb.innerHTML = rows.map(r => {
+    if (r.t === 'clock') {
+      const e = r.d, ci = new Date(e.clock_in), co = e.clock_out ? new Date(e.clock_out) : null;
+      return `<tr>
+        <td class="td-hi">${ci.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td>
+        <td class="td-mono">${fmtTime(ci)}</td>
+        <td class="td-mono">${co ? fmtTime(co) : '—'}</td>
+        <td class="td-mono">${co ? fmtDur((co-ci)/3600000) : '—'}</td>
+        <td>${e.notes || '<span style="color:var(--muted)">—</span>'}</td>
+        <td><span class="badge bb">Clock</span></td>
+      </tr>`;
+    } else {
+      const t = r.d;
+      const sc = t.status==='approved'?'bg':t.status==='denied'?'br':'ba';
+      return `<tr>
+        <td class="td-hi">${r.ts.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td>
+        <td class="td-mono">—</td><td class="td-mono">—</td>
+        <td class="td-mono">${t.hours}h</td>
+        <td>${t.reason||'—'}${t.notes?' <span style="color:var(--muted);font-size:.8em">('+t.notes+')</span>':''}</td>
+        <td><span class="badge ${sc}">${t.status}</span></td>
+      </tr>`;
+    }
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════════
+   TIME OFF
+   ═══════════════════════════════════════════════ */
+function openTimeOffModal() {
+  document.getElementById('to-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('to-hrs').value = '8';
+  document.getElementById('to-notes').value = '';
+  showOnly('m-timeoff');
+}
+
+async function submitTimeOff() {
+  const date = document.getElementById('to-date').value;
+  const hrs  = parseFloat(document.getElementById('to-hrs').value);
+  if (!date || !hrs) { toast('Fill in required fields', 'er'); return; }
+
+  const { error } = await sb.from('time_off_requests').insert({
+    user_id: S.user.id,
+    workplace_id: S.workplace?.id || null,
+    date, hours: hrs,
+    reason: document.getElementById('to-reason').value,
+    notes:  document.getElementById('to-notes').value.trim() || null,
+    status: 'pending',
+  });
+  if (error) { toast(error.message, 'er'); return; }
+  closeModal();
+  toast('Time off requested!', 'ok');
+  await loadTimeOffRequests();
+}
+
+async function loadTimeOffRequests() {
+  const { data } = await sb.from('time_off_requests').select('*')
+    .eq('user_id',S.user.id).order('date',{ascending:false});
+  const tb = document.getElementById('tb-to');
+  if (!data?.length) {
+    tb.innerHTML='<tr><td colspan="6"><div class="empty"><div class="empty-icon">🌴</div><div class="empty-txt">No requests yet</div></div></td></tr>'; return;
+  }
+  tb.innerHTML = data.map(t => {
+    const sc = t.status==='approved'?'bg':t.status==='denied'?'br':'ba';
+    return `<tr>
+      <td class="td-hi">${new Date(t.date+'T12:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})}</td>
+      <td class="td-mono">${t.hours}h</td>
+      <td>${t.reason||'—'}</td>
+      <td>${t.notes||'<span style="color:var(--muted)">—</span>'}</td>
+      <td><span class="badge ${sc}">${t.status}</span></td>
+      <td>${t.status==='pending'?`<button class="btn btn-danger btn-sm" onclick="cancelTimeOff('${t.id}')">Cancel</button>`:'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function cancelTimeOff(id) {
+  const { error } = await sb.from('time_off_requests').delete().eq('id',id);
+  if (error) { toast(error.message,'er'); return; }
+  toast('Request cancelled','inf');
+  await loadTimeOffRequests();
+}
+
+/* ═══════════════════════════════════════════════
+   ADMIN
+   ═══════════════════════════════════════════════ */
+async function loadAdminPage() {
+  if (!S.workplace) return;
+  document.getElementById('adm-wp-lbl').textContent = S.workplace.name;
+  document.getElementById('adm-sched').textContent  = S.workplace.hours_per_week || 40;
+  document.getElementById('adm-hrs-inp').value      = S.workplace.hours_per_week || 40;
+  await Promise.all([loadAdminEmployees(), loadAdminTimeOff(), loadAdminStats()]);
+}
+
+async function loadAdminEmployees() {
+  const { data: members } = await sb.from('workplace_members')
+    .select('*, profile:profiles(id,full_name,role)')
+    .eq('workplace_id', S.workplace.id);
+
+  const list = document.getElementById('adm-emp-list');
+  document.getElementById('adm-emp-cnt').textContent = members?.length || 0;
+
+  if (!members?.length) {
+    list.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet. Share your workplace name so employees can join on signup.</div></div>'; return;
+  }
+
+  const { start, end } = weekRange();
+  const rowsHtml = await Promise.all(members.map(async m => {
+    const uid = m.profile?.id || m.user_id;
+    const { data: entries } = await sb.from('time_entries').select('clock_in,clock_out')
+      .eq('user_id',uid).gte('clock_in',start.toISOString()).lte('clock_in',end.toISOString()).not('clock_out','is',null);
+    let wh = 0;
+    (entries||[]).forEach(e => wh += (new Date(e.clock_out)-new Date(e.clock_in))/3600000);
+    const target = S.workplace.hours_per_week || 40;
+    const pct = Math.min((wh/target)*100,100);
+    return `<div class="emp-row">
+      <div>
+        <div class="emp-name">${m.profile?.full_name || 'Unknown'}</div>
+        <div class="emp-role">${m.role==='admin'?'👑 Admin':'👤 Employee'}</div>
+      </div>
+      <div>
+        <div class="emp-hrs-val">${wh.toFixed(1)}h <span style="color:var(--muted);font-size:.75rem">/ ${target}h</span></div>
+        <div class="prog-wrap" style="margin:.3rem 0;height:5px;width:120px">
+          <div class="prog-bar" style="width:${pct}%"></div>
+        </div>
+        <div class="emp-hrs-sub">${pct.toFixed(0)}% this week</div>
+      </div>
+    </div>`;
+  }));
+  list.innerHTML = rowsHtml.join('');
+}
+
+async function loadAdminStats() {
+  const { start, end } = weekRange();
+  const { data: members } = await sb.from('workplace_members').select('user_id').eq('workplace_id',S.workplace.id);
+  let total = 0;
+  for (const m of (members||[])) {
+    const { data: e } = await sb.from('time_entries').select('clock_in,clock_out')
+      .eq('user_id',m.user_id).gte('clock_in',start.toISOString()).lte('clock_in',end.toISOString()).not('clock_out','is',null);
+    (e||[]).forEach(x => total += (new Date(x.clock_out)-new Date(x.clock_in))/3600000);
+  }
+  document.getElementById('adm-wk-hrs').textContent = total.toFixed(1)+'h';
+}
+
+async function loadAdminTimeOff() {
+  const { data } = await sb.from('time_off_requests')
+    .select('*, profile:profiles(full_name)')
+    .eq('workplace_id',S.workplace.id)
+    .order('created_at',{ascending:false}).limit(30);
+  const tb = document.getElementById('tb-adm-to');
+  if (!data?.length) {
+    tb.innerHTML='<tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No requests</div></div></td></tr>'; return;
+  }
+  tb.innerHTML = data.map(t => {
+    const sc = t.status==='approved'?'bg':t.status==='denied'?'br':'ba';
+    return `<tr>
+      <td class="td-hi">${t.profile?.full_name||'—'}</td>
+      <td class="td-mono">${new Date(t.date+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</td>
+      <td class="td-mono">${t.hours}h</td>
+      <td>${t.reason||'—'}</td>
+      <td><span class="badge ${sc}">${t.status}</span></td>
+      <td>${t.status==='pending'?`<div class="gap2">
+        <button class="btn btn-success btn-sm" onclick="setToStatus('${t.id}','approved')">✓ Approve</button>
+        <button class="btn btn-danger  btn-sm" onclick="setToStatus('${t.id}','denied')">✕ Deny</button>
+      </div>`:'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function saveSchedule() {
+  const h = parseInt(document.getElementById('adm-hrs-inp').value);
+  if (!h || h<1 || h>168) { toast('Enter 1–168 hours','er'); return; }
+  const { error } = await sb.from('workplaces').update({ hours_per_week: h }).eq('id',S.workplace.id);
+  if (error) { toast(error.message,'er'); return; }
+  S.workplace.hours_per_week = h;
+  document.getElementById('adm-sched').textContent = h;
+  toast('Schedule updated!','ok');
+  await loadWeekProgress();
+}
+
+async function setToStatus(id, status) {
+  const { error } = await sb.from('time_off_requests').update({ status }).eq('id',id);
+  if (error) { toast(error.message,'er'); return; }
+  toast(`Request ${status}!`, 'ok');
+  await loadAdminTimeOff();
+}
+
+function openEditWpModal() {
+  document.getElementById('wp-name-inp').value = S.workplace?.name || '';
+  showOnly('m-wp');
+}
+
+async function saveWorkplace() {
+  const name = document.getElementById('wp-name-inp').value.trim();
+  if (!name) return;
+  const { error } = await sb.from('workplaces').update({ name }).eq('id', S.workplace.id);
+  if (error) { toast(error.message,'er'); return; }
+  S.workplace.name = name;
+  document.getElementById('nav-wp-name').textContent = name;
+  document.getElementById('adm-wp-lbl').textContent  = name;
+  closeModal(); toast('Workplace updated!','ok');
+}
+
+/* ═══════════════════════════════════════════════
+   NAV & MODALS
+   ═══════════════════════════════════════════════ */
+function goto(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('on'));
+  document.getElementById('page-'+page).classList.add('on');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('on', b.dataset.p === page));
+  if (page==='history')  loadHistory();
+  if (page==='timeoff')  loadTimeOffRequests();
+  if (page==='admin')    loadAdminPage();
+}
+
+function openModal(id) {
+  showOnly(id);
+}
+function showOnly(id) {
+  document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+  document.getElementById('overlay').classList.add('on');
+}
+function closeModal() {
+  document.getElementById('overlay').classList.remove('on');
+}
+function overlayClick(e) {
+  if (e.target === document.getElementById('overlay')) closeModal();
+}
+
+/* ═══════════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════════ */
+function toast(msg, type='inf') {
+  const icons = { ok:'✓', er:'✕', inf:'ℹ' };
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${icons[type]||'•'}</span>${msg}`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => {
+    el.style.cssText = 'opacity:0;transform:translateY(6px);transition:200ms';
+    setTimeout(() => el.remove(), 200);
+  }, 3200);
+}
+
+/* ═══════════════════════════════════════════════
+   FORMAT HELPERS
+   ═══════════════════════════════════════════════ */
+function fmtTime(d) {
+  return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true});
+}
+function fmtElapsed(ms) {
+  const s = Math.floor(ms/1000);
+  return [Math.floor(s/3600), Math.floor((s%3600)/60), s%60].map(v=>String(v).padStart(2,'0')).join(':');
+}
+function fmtDur(h) {
+  const hh = Math.floor(h), mm = Math.round((h-hh)*60);
+  return hh===0 ? `${mm}m` : mm===0 ? `${hh}h` : `${hh}h ${mm}m`;
+}
+
+/* ─── Start ─────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
