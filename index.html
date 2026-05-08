@@ -1015,8 +1015,11 @@ async function doLogin(e) {
     email:    document.getElementById('l-email').value.trim(),
     password: document.getElementById('l-pass').value,
   });
-  btn.disabled = false; btn.textContent = 'Sign In';
-  if (error) { errEl.textContent = error.message; errEl.classList.add('on'); }
+  if (error) {
+    btn.disabled = false; btn.textContent = 'Sign In';
+    errEl.textContent = error.message; errEl.classList.add('on');
+  }
+  // On success: keep button in loading state — onLogin() will hide the auth form
 }
 
 async function onLogin(user) {
