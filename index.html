@@ -737,7 +737,11 @@ tr:hover td{background:rgba(255,255,255,.015)}
   <!-- Admin Employee History -->
   <div class="modal hidden" id="m-adm-emp-hist" style="max-width:800px;width:95vw">
     <button class="m-close" onclick="closeModal()">✕</button>
-    <div class="m-title" id="adm-emp-hist-title">Employee History</div>
+    <div class="flex-center jb" style="margin-bottom:.25rem">
+      <div class="m-title" id="adm-emp-hist-title" style="margin:0">Employee History</div>
+      <button class="btn btn-danger btn-sm" id="adm-emp-del-btn" onclick="adminDeleteEmployeeCurrent()">Delete Account</button>
+    </div>
+    <div id="adm-emp-email" style="color:var(--muted);font-size:.85rem;margin-bottom:1rem"></div>
     <div class="flex-center gap2" style="margin-bottom:1rem">
       <label class="lbl" style="margin:0">Month:</label>
       <input type="month" id="adm-hist-month" class="inp" style="width:auto" onchange="loadAdminEmpHistory()">
@@ -1576,12 +1580,14 @@ async function loadAdminPage() {
    ADMIN EMPLOYEE HISTORY
    ═══════════════════════════════════════════════ */
 // State for which employee the admin is viewing
-const AH = { userId: null, name: null };
+const AH = { userId: null, name: null, email: null };
 
-function openAdminEmpHistory(userId, name) {
+function openAdminEmpHistory(userId, name, email) {
   AH.userId = userId;
   AH.name   = name;
+  AH.email  = email || '';
   document.getElementById('adm-emp-hist-title').textContent = `📋 ${name}'s History`;
+  document.getElementById('adm-emp-email').textContent = email || '';
   // Default to current month
   const now = new Date();
   document.getElementById('adm-hist-month').value =
@@ -1681,7 +1687,7 @@ async function saveEditEntry() {
 
 async function loadAdminEmployees() {
   const { data: members } = await sb.from('workplace_members')
-    .select('*, profile:profiles(id,full_name,role)')
+    .select('*, profile:profiles(id,full_name,role,email)')
     .eq('workplace_id', S.workplace.id);
 
   const list = document.getElementById('adm-emp-list');
@@ -1701,7 +1707,8 @@ async function loadAdminEmployees() {
     const target = S.workplace.hours_per_week || 40;
     const pct = Math.min((wh/target)*100,100);
     const name = m.profile?.full_name || 'Unknown';
-    return `<div class="emp-row" style="cursor:pointer" onclick="openAdminEmpHistory('${uid}','${name}')" title="View &amp; edit history">
+    const email = m.profile?.email || '';
+    return `<div class="emp-row" style="cursor:pointer" onclick="openAdminEmpHistory('${uid}','${name}','${email}')" title="View &amp; edit history">
       <div>
         <div class="emp-name">${name}</div>
         <div class="emp-role">${m.role==='admin'?'👑 Admin':'👤 Employee'}</div>
@@ -1712,9 +1719,6 @@ async function loadAdminEmployees() {
           <div class="prog-bar" style="width:${pct}%"></div>
         </div>
         <div class="emp-hrs-sub" style="font-size:.7rem">${pct.toFixed(0)}% this week &middot; <span style="color:var(--accent)">View history ›</span></div>
-      </div>
-      <div onclick="event.stopPropagation()">
-        <button class="btn btn-danger btn-sm" onclick="adminDeleteEmployee('${uid}','${name}')">Delete</button>
       </div>
     </div>`;
   }));
@@ -2020,6 +2024,11 @@ async function deleteOwnAccount() {
   toast('Account deleted.', 'ok');
   onLogout();
   await sb.auth.signOut();
+}
+
+async function adminDeleteEmployeeCurrent() {
+  if (!AH.userId) return;
+  adminDeleteEmployee(AH.userId, AH.name);
 }
 
 async function adminDeleteEmployee(userId, name) {

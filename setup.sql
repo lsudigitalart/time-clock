@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id            uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name     text,
   role          text NOT NULL DEFAULT 'user',   -- 'user' | 'admin'
+  email         text,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
@@ -74,13 +75,14 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, role)
+  INSERT INTO public.profiles (id, full_name, role, email)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'user')
+    COALESCE(NEW.raw_user_meta_data->>'role', 'user'),
+    NEW.email
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
   RETURN NEW;
 END;
 $$;
