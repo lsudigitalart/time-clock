@@ -1349,41 +1349,41 @@ async function submitTimeOff() {
   const reason = document.getElementById('to-reason').value;
   const notes  = document.getElementById('to-notes').value.trim() || null;
 
-  // Build one row per calendar day in the range
-  const rows = [];
-  const cur = new Date(start + 'T12:00');
-  const last = new Date(end + 'T12:00');
-  while (cur <= last) {
-    rows.push({
-      user_id:      S.user.id,
-      workplace_id: S.workplace.id,
-      date:         cur.toISOString().split('T')[0],
-      hours:        8,
-      reason, notes, status: 'pending',
-    });
-    cur.setDate(cur.getDate() + 1);
-  }
+  // Count calendar days in range (for toast message)
+  const msPerDay = 86400000;
+  const days = Math.round((new Date(end+'T12:00') - new Date(start+'T12:00')) / msPerDay) + 1;
 
-  const { error } = await sb.from('time_off_requests').insert(rows);
+  const { error } = await sb.from('time_off_requests').insert({
+    user_id:      S.user.id,
+    workplace_id: S.workplace.id,
+    start_date:   start,
+    end_date:     end,
+    reason, notes, status: 'pending',
+  });
   if (error) { toast(error.message, 'er'); return; }
   closeModal();
-  const days = rows.length;
   toast(`Time off requested for ${days} day${days === 1 ? '' : 's'}!`, 'ok');
   await loadTimeOffRequests();
 }
 
 async function loadTimeOffRequests() {
   const { data } = await sb.from('time_off_requests').select('*')
-    .eq('user_id',S.user.id).order('date',{ascending:false});
+    .eq('user_id',S.user.id).order('created_at',{ascending:false});
   const tb = document.getElementById('tb-to');
   if (!data?.length) {
     tb.innerHTML='<tr><td colspan="6"><div class="empty"><div class="empty-icon">🌴</div><div class="empty-txt">No requests yet</div></div></td></tr>'; return;
   }
   tb.innerHTML = data.map(t => {
     const sc = t.status==='approved'?'bg':t.status==='denied'?'br':'ba';
+    const sd = t.start_date || t.date;
+    const ed = t.end_date   || t.date;
+    const days = sd && ed ? Math.round((new Date(ed+'T12:00')-new Date(sd+'T12:00'))/86400000)+1 : 1;
+    const dateLabel = sd === ed
+      ? new Date(sd+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+      : `${new Date(sd+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${new Date(ed+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
     return `<tr>
-      <td class="td-hi">${new Date(t.date+'T12:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})}</td>
-      <td class="td-mono">1</td>
+      <td class="td-hi">${dateLabel}</td>
+      <td class="td-mono">${days} day${days===1?'':'s'}</td>
       <td>${t.reason||'—'}</td>
       <td>${t.notes||'<span style="color:var(--muted)">—</span>'}</td>
       <td><span class="badge ${sc}">${t.status}</span></td>
@@ -1475,10 +1475,16 @@ async function loadAdminTimeOff() {
   }
   tb.innerHTML = data.map(t => {
     const sc = t.status==='approved'?'bg':t.status==='denied'?'br':'ba';
+    const sd = t.start_date || t.date;
+    const ed = t.end_date   || t.date;
+    const days = sd && ed ? Math.round((new Date(ed+'T12:00')-new Date(sd+'T12:00'))/86400000)+1 : 1;
+    const dateLabel = sd === ed
+      ? new Date(sd+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+      : `${new Date(sd+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${new Date(ed+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
     return `<tr>
       <td class="td-hi">${t.profile?.full_name||'—'}</td>
-      <td class="td-mono">${new Date(t.date+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</td>
-      <td class="td-mono">1 day</td>
+      <td class="td-mono">${dateLabel}</td>
+      <td class="td-mono">${days} day${days===1?'':'s'}</td>
       <td>${t.reason||'—'}</td>
       <td><span class="badge ${sc}">${t.status}</span></td>
       <td>${t.status==='pending'?`<div class="gap2">

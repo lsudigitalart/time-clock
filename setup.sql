@@ -1,0 +1,275 @@
+-- ============================================================
+-- PunchCard — Supabase SQL Setup
+-- Run this entire file in your Supabase SQL Editor
+-- ============================================================
+
+
+-- ── 1. EXTENSIONS ────────────────────────────────────────────
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+
+-- ── 2. TABLES ─────────────────────────────────────────────────
+
+-- Profiles (mirrors auth.users)
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id            uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  full_name     text,
+  role          text NOT NULL DEFAULT 'user',   -- 'user' | 'admin'
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+-- Workplaces
+CREATE TABLE IF NOT EXISTS public.workplaces (
+  id              uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name            text NOT NULL,
+  admin_id        uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  hours_per_week  numeric NOT NULL DEFAULT 40,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+-- Workplace members (employees)
+CREATE TABLE IF NOT EXISTS public.workplace_members (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workplace_id  uuid NOT NULL REFERENCES public.workplaces(id) ON DELETE CASCADE,
+  user_id       uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  role          text NOT NULL DEFAULT 'member',  -- 'member' | 'admin'
+  joined_at     timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (workplace_id, user_id)
+);
+
+-- Time entries (clock in / clock out)
+CREATE TABLE IF NOT EXISTS public.time_entries (
+  id                uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id           uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  workplace_id      uuid NOT NULL REFERENCES public.workplaces(id) ON DELETE CASCADE,
+  clock_in          timestamptz NOT NULL,
+  clock_out         timestamptz,
+  auto_clockout_at  timestamptz,
+  notes             text,
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+
+-- Time-off requests
+CREATE TABLE IF NOT EXISTS public.time_off_requests (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  workplace_id  uuid NOT NULL REFERENCES public.workplaces(id) ON DELETE CASCADE,
+  date          date,                              -- legacy, kept for existing rows
+  start_date    date NOT NULL,
+  end_date      date NOT NULL,
+  reason        text,
+  notes         text,
+  status        text NOT NULL DEFAULT 'pending',  -- 'pending' | 'approved' | 'denied'
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+
+-- ── 3. AUTH TRIGGER ───────────────────────────────────────────
+-- Automatically creates a profile row when a new user signs up.
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, role)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'user')
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+
+-- ── 4. ROW LEVEL SECURITY ─────────────────────────────────────
+
+ALTER TABLE public.profiles            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workplaces          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workplace_members   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.time_entries        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.time_off_requests   ENABLE ROW LEVEL SECURITY;
+
+
+-- ── profiles ──────────────────────────────────────────────────
+
+CREATE POLICY "profiles: read all (authenticated)"
+  ON public.profiles FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "profiles: insert own"
+  ON public.profiles FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "profiles: update own"
+  ON public.profiles FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = id);
+
+
+-- ── workplaces ────────────────────────────────────────────────
+-- Allow anon SELECT so the sign-up page can list workplaces.
+
+CREATE POLICY "workplaces: read all"
+  ON public.workplaces FOR SELECT
+  USING (true);
+
+CREATE POLICY "workplaces: insert (authenticated)"
+  ON public.workplaces FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = admin_id);
+
+CREATE POLICY "workplaces: update by admin"
+  ON public.workplaces FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = admin_id);
+
+
+-- ── workplace_members ─────────────────────────────────────────
+
+-- A user can see their own memberships; a workplace admin can see all members of their workplace.
+CREATE POLICY "workplace_members: read own or admin"
+  ON public.workplace_members FOR SELECT
+  TO authenticated
+  USING (
+    auth.uid() = user_id
+    OR EXISTS (
+      SELECT 1 FROM public.workplaces w
+      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "workplace_members: insert own or admin"
+  ON public.workplace_members FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    auth.uid() = user_id
+    OR EXISTS (
+      SELECT 1 FROM public.workplaces w
+      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "workplace_members: update by admin"
+  ON public.workplace_members FOR UPDATE
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.workplaces w
+      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "workplace_members: delete by admin or self"
+  ON public.workplace_members FOR DELETE
+  TO authenticated
+  USING (
+    auth.uid() = user_id
+    OR EXISTS (
+      SELECT 1 FROM public.workplaces w
+      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
+    )
+  );
+
+
+-- ── time_entries ──────────────────────────────────────────────
+
+-- Users can see their own entries; admins can see all entries in their workplace.
+CREATE POLICY "time_entries: read own or workplace admin"
+  ON public.time_entries FOR SELECT
+  TO authenticated
+  USING (
+    auth.uid() = user_id
+    OR EXISTS (
+      SELECT 1 FROM public.workplaces w
+      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "time_entries: insert own"
+  ON public.time_entries FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "time_entries: update own or workplace admin"
+  ON public.time_entries FOR UPDATE
+  TO authenticated
+  USING (
+    auth.uid() = user_id
+    OR EXISTS (
+      SELECT 1 FROM public.workplaces w
+      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "time_entries: delete own"
+  ON public.time_entries FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+
+-- ── time_off_requests ─────────────────────────────────────────
+
+CREATE POLICY "time_off: read own or workplace admin"
+  ON public.time_off_requests FOR SELECT
+  TO authenticated
+  USING (
+    auth.uid() = user_id
+    OR EXISTS (
+      SELECT 1 FROM public.workplaces w
+      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "time_off: insert own"
+  ON public.time_off_requests FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+-- Admins can update status (approve/deny); users can update their own pending requests.
+CREATE POLICY "time_off: update own pending or admin"
+  ON public.time_off_requests FOR UPDATE
+  TO authenticated
+  USING (
+    (auth.uid() = user_id AND status = 'pending')
+    OR EXISTS (
+      SELECT 1 FROM public.workplaces w
+      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "time_off: delete own pending"
+  ON public.time_off_requests FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id AND status = 'pending');
+
+
+-- ── 5. HELPFUL INDEXES ────────────────────────────────────────
+
+CREATE INDEX IF NOT EXISTS idx_time_entries_user     ON public.time_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_workplace ON public.time_entries(workplace_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_clock_in  ON public.time_entries(clock_in);
+CREATE INDEX IF NOT EXISTS idx_time_off_user          ON public.time_off_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_time_off_workplace     ON public.time_off_requests(workplace_id);
+CREATE INDEX IF NOT EXISTS idx_wm_user                ON public.workplace_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_wm_workplace           ON public.workplace_members(workplace_id);
+
+
+-- ── Done! ─────────────────────────────────────────────────────
+-- All tables, RLS policies, indexes, and the auth trigger are set up.
+-- Next steps:
+--   1. Fill in SB_URL and SB_KEY in index.html
+--   2. Push index.html to GitHub and enable GitHub Pages
+--   3. In Supabase → Authentication → URL Configuration, add your GitHub Pages URL
+--      as a Redirect URL and set it as the Site URL.
