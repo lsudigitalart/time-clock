@@ -811,7 +811,16 @@ async function doResetPassword() {
   });
   btn.disabled = false; btn.textContent = 'Send Reset Link';
 
-  if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
+  if (error) {
+    const msg = (error.message || '').toLowerCase();
+    if (msg.includes('rate limit')) {
+      errEl.textContent = 'Too many reset emails were requested. Please wait a minute and try again.';
+    } else {
+      errEl.textContent = error.message;
+    }
+    errEl.classList.add('on');
+    return;
+  }
   okEl.textContent = '✓ Check your inbox for a reset link!'; okEl.classList.add('on');
 }
 
