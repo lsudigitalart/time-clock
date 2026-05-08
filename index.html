@@ -1059,7 +1059,10 @@ function onLogout() {
 
 async function doSignout() {
   clearInterval(S.clockTick); clearTimeout(S.acoTimer);
-  await sb.auth.signOut();
+  onLogout();
+  sb.auth.signOut().catch(err => {
+    console.error('Sign out error:', err);
+  });
 }
 
 /* ═══════════════════════════════════════════════
