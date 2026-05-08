@@ -503,7 +503,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
       </div>
       <div class="card">
         <div class="tbl-wrap"><table>
-          <thead><tr><th>Date</th><th>In</th><th>Out</th><th>Duration</th><th>Notes / Reason</th><th>Type</th></tr></thead>
+          <thead><tr><th>Date</th><th>In</th><th>Out</th><th>Duration</th><th>Notes / Reason</th><th>Type</th><th></th></tr></thead>
           <tbody id="tb-hist"><tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No records</div></div></td></tr></tbody>
         </table></div>
       </div>
@@ -686,6 +686,32 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="m-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="submitTimeOff()">Submit Request</button>
+    </div>
+  </div>
+
+  <!-- Edit Entry -->
+  <div class="modal hidden" id="m-edit-entry">
+    <button class="m-close" onclick="closeModal()">✕</button>
+    <div class="m-title">✏️ Edit Time Entry</div>
+    <input type="hidden" id="ee-id">
+    <div class="frow">
+      <div class="fld">
+        <label class="lbl">Clock In</label>
+        <input type="datetime-local" id="ee-in" class="inp">
+      </div>
+      <div class="fld">
+        <label class="lbl">Clock Out</label>
+        <input type="datetime-local" id="ee-out" class="inp">
+      </div>
+    </div>
+    <div class="fld">
+      <label class="lbl">Notes</label>
+      <input type="text" id="ee-notes" class="inp" placeholder="What were you working on?">
+    </div>
+    <div id="ee-err" class="err-msg"></div>
+    <div class="m-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditEntry()">Save Changes</button>
     </div>
   </div>
 
@@ -1325,19 +1351,22 @@ async function loadHistory() {
       .gte('clock_in',s.toISOString()).lte('clock_in',e.toISOString())
       .order('clock_in',{ascending:false}),
     sb.from('time_off_requests').select('*').eq('user_id',S.user.id)
-      .gte('date',s.toISOString().split('T')[0]).lte('date',e.toISOString().split('T')[0])
-      .order('date',{ascending:false}),
+      .gte('start_date',s.toISOString().split('T')[0]).lte('start_date',e.toISOString().split('T')[0])
+      .order('start_date',{ascending:false}),
   ]);
 
   const tb = document.getElementById('tb-hist');
   if (!entries?.length && !tos?.length) {
-    tb.innerHTML='<tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No records this month</div></div></td></tr>'; return;
+    tb.innerHTML='<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No records this month</div></div></td></tr>'; return;
   }
 
   const rows = [
     ...(entries||[]).map(e=>({t:'clock', d:e, ts:new Date(e.clock_in)})),
-    ...(tos||[]).map(t=>({t:'to', d:t, ts:new Date(t.date+'T12:00')})),
+    ...(tos||[]).map(t=>({t:'to', d:t, ts:new Date((t.start_date||t.date)+'T12:00')})),
   ].sort((a,b)=>b.ts-a.ts);
+
+  // Cache entries for the edit modal
+  S._historyCache = (entries || []);
 
   tb.innerHTML = rows.map(r => {
     if (r.t === 'clock') {
@@ -1367,6 +1396,47 @@ async function loadHistory() {
 /* ═══════════════════════════════════════════════
    TIME OFF
    ═══════════════════════════════════════════════ */
+function openEditEntryModal(id) {
+  const entry = S._historyCache?.find(e => e.id === id);
+  if (!entry) { toast('Entry not found — please refresh', 'er'); return; }
+  const toLocal = iso => {
+    const d = new Date(iso);
+    return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  };
+  document.getElementById('ee-id').value    = id;
+  document.getElementById('ee-in').value    = toLocal(entry.clock_in);
+  document.getElementById('ee-out').value   = entry.clock_out ? toLocal(entry.clock_out) : '';
+  document.getElementById('ee-notes').value = entry.notes || '';
+  document.getElementById('ee-err').classList.remove('on');
+  showOnly('m-edit-entry');
+}
+
+async function saveEditEntry() {
+  const errEl = document.getElementById('ee-err');
+  errEl.classList.remove('on');
+  const id    = document.getElementById('ee-id').value;
+  const inVal = document.getElementById('ee-in').value;
+  const outVal= document.getElementById('ee-out').value;
+  const notes = document.getElementById('ee-notes').value.trim() || null;
+
+  if (!inVal) { errEl.textContent = 'Clock-in time is required.'; errEl.classList.add('on'); return; }
+  const clockIn  = new Date(inVal).toISOString();
+  const clockOut = outVal ? new Date(outVal).toISOString() : null;
+  if (clockOut && clockOut <= clockIn) {
+    errEl.textContent = 'Clock-out must be after clock-in.'; errEl.classList.add('on'); return;
+  }
+
+  const { error } = await sb.from('time_entries')
+    .update({ clock_in: clockIn, clock_out: clockOut, notes })
+    .eq('id', id).eq('user_id', S.user.id);
+  if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
+
+  closeModal();
+  toast('Entry updated!', 'ok');
+  await loadHistory();
+  await Promise.all([loadWeekProgress(), loadTodayHours(), loadMonthHours()]);
+}
+
 function openTimeOffModal() {
   if (!S.workplace?.id) {
     toast('No workplace assigned. Ask your admin to add you, then sign out/in.', 'er');
