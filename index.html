@@ -1218,15 +1218,20 @@ async function loadWeekProgress() {
       .gte('clock_in', start.toISOString())
       .lte('clock_in', end.toISOString())
       .not('clock_out', 'is', null),
-    sb.from('time_off_requests').select('hours')
+    sb.from('time_off_requests').select('start_date,end_date')
       .eq('user_id', S.user.id).eq('status', 'approved')
-      .gte('date', start.toISOString().split('T')[0])
-      .lte('date', end.toISOString().split('T')[0]),
+      .gte('start_date', start.toISOString().split('T')[0])
+      .lte('start_date', end.toISOString().split('T')[0]),
   ]);
 
   let hrs = 0;
   (entries || []).forEach(e => hrs += (new Date(e.clock_out) - new Date(e.clock_in)) / 3600000);
-  (approved || []).forEach(t => hrs += t.hours);
+  (approved || []).forEach(t => {
+    if (t.start_date && t.end_date) {
+      const days = Math.round((new Date(t.end_date+'T12:00') - new Date(t.start_date+'T12:00')) / 86400000) + 1;
+      hrs += days * 8;
+    }
+  });
   if (S.entry) {
     const ci = new Date(S.entry.clock_in);
     if (ci >= start && ci <= end) hrs += (Date.now() - ci.getTime()) / 3600000;
