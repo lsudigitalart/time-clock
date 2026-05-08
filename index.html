@@ -621,8 +621,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
           </div>
         </div>
         <div class="flex-center gap2" style="margin-top:.75rem;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="syncToSheets('time_entries')">⬆ Sync Time Entries</button>
-          <button class="btn btn-primary" onclick="syncToSheets('time_off_requests')">⬆ Sync Time Off</button>
+          <button class="btn btn-primary" onclick="syncToSheets()">⬆ Sync Time Entries + Time Off</button>
         </div>
         <div id="sheets-status" style="margin-top:.6rem;font-size:.8rem;color:var(--text2)"></div>
       </div>
@@ -1637,62 +1636,72 @@ async function syncToSheets(type) {
       });
     }
 
-    statusEl.textContent = `Fetching ${type === 'time_entries' ? 'time entries' : 'time off requests'}…`;
-    let rows = [];
-    if (type === 'time_entries') {
-      const { data, error } = await sb
-        .from('time_entries')
-        .select('id, user_id, clock_in, clock_out, notes')
-        .eq('workplace_id', S.workplace.id)
-        .order('clock_in', { ascending: false });
-      if (error) throw error;
-      rows = (data || []).map(r => ({
-        id:       r.id,
-        employee: nameMap[r.user_id] || r.user_id,
-        clock_in: r.clock_in  ? new Date(r.clock_in).toLocaleString()  : '',
-        clock_out: r.clock_out ? new Date(r.clock_out).toLocaleString() : '',
-        hours:    r.clock_in && r.clock_out
-                    ? ((new Date(r.clock_out) - new Date(r.clock_in)) / 3600000).toFixed(2)
-                    : '',
-        notes:    r.notes || '',
-      }));
-    } else {
-      const { data, error } = await sb
-        .from('time_off_requests')
-        .select('id, user_id, start_date, end_date, reason, notes, status, created_at')
-        .eq('workplace_id', S.workplace.id)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      rows = (data || []).map(r => ({
-        id:       r.id,
-        employee: nameMap[r.user_id] || r.user_id,
-        start_date: r.start_date || '',
-        end_date: r.end_date   || '',
-        days:     r.start_date && r.end_date
-                    ? Math.round((new Date(r.end_date+'T12:00') - new Date(r.start_date+'T12:00')) / 86400000) + 1
-                    : 1,
-        reason:   r.reason || '',
-        notes:    r.notes  || '',
-        status:   r.status,
-        requested: new Date(r.created_at).toLocaleString(),
-      }));
+    const syncOne = async (syncType) => {
+      statusEl.textContent = `Fetching ${syncType === 'time_entries' ? 'time entries' : 'time off requests'}…`;
+      let rows = [];
+
+      if (syncType === 'time_entries') {
+        const { data, error } = await sb
+          .from('time_entries')
+          .select('id, user_id, clock_in, clock_out, notes')
+          .eq('workplace_id', S.workplace.id)
+          .order('clock_in', { ascending: false });
+        if (error) throw error;
+        rows = (data || []).map(r => ({
+          id:       r.id,
+          employee: nameMap[r.user_id] || r.user_id,
+          clock_in: r.clock_in  ? new Date(r.clock_in).toLocaleString()  : '',
+          clock_out: r.clock_out ? new Date(r.clock_out).toLocaleString() : '',
+          hours:    r.clock_in && r.clock_out
+                      ? ((new Date(r.clock_out) - new Date(r.clock_in)) / 3600000).toFixed(2)
+                      : '',
+          notes:    r.notes || '',
+        }));
+      } else {
+        const { data, error } = await sb
+          .from('time_off_requests')
+          .select('id, user_id, start_date, end_date, reason, notes, status, created_at')
+          .eq('workplace_id', S.workplace.id)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        rows = (data || []).map(r => ({
+          id:       r.id,
+          employee: nameMap[r.user_id] || r.user_id,
+          start_date: r.start_date || '',
+          end_date: r.end_date   || '',
+          days:     r.start_date && r.end_date
+                      ? Math.round((new Date(r.end_date+'T12:00') - new Date(r.start_date+'T12:00')) / 86400000) + 1
+                      : 1,
+          reason:   r.reason || '',
+          notes:    r.notes  || '',
+          status:   r.status,
+          requested: new Date(r.created_at).toLocaleString(),
+        }));
+      }
+
+      const sheetName = syncType === 'time_entries' ? 'Time Entries' : 'Time Off';
+      statusEl.textContent = `Sending ${rows.length} rows to Google Sheets…`;
+
+      const res = await fetch(url, {
+        method: 'POST',
+        body: JSON.stringify({ sheet: sheetName, clear: true, rows }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'Sync failed');
+      return { sheetName, count: json.written };
+    };
+
+    if (type) {
+      const result = await syncOne(type);
+      statusEl.textContent = `✓ Synced ${result.count} rows to "${result.sheetName}" tab.`;
+      toast(`Synced ${result.count} rows!`, 'ok');
+      return;
     }
 
-    const sheetName = type === 'time_entries' ? 'Time Entries' : 'Time Off';
-    statusEl.textContent = `Sending ${rows.length} rows to Google Sheets…`;
-
-    const res = await fetch(url, {
-      method: 'POST',
-      body: JSON.stringify({ sheet: sheetName, clear: true, rows }),
-    });
-    const json = await res.json();
-    if (json.ok) {
-      statusEl.textContent = `✓ Synced ${json.written} rows to "${sheetName}" tab.`;
-      toast(`Synced ${json.written} rows!`, 'ok');
-    } else {
-      statusEl.textContent = `Error: ${json.error}`;
-      toast(json.error, 'er');
-    }
+    const entriesResult = await syncOne('time_entries');
+    const timeOffResult = await syncOne('time_off_requests');
+    statusEl.textContent = `✓ Synced both datasets: ${entriesResult.count} time entries and ${timeOffResult.count} time off rows.`;
+    toast('Synced time entries and time off!', 'ok');
   } catch (err) {
     console.error('Sync error:', err);
     statusEl.textContent = `Error: ${err.message}`;
