@@ -1610,68 +1610,77 @@ function saveSheetUrl() {
 }
 
 async function syncToSheets(type) {
+  if (!S.workplace?.id) {
+    await loadWorkplace();
+    if (!S.workplace?.id) { toast('No workplace loaded', 'er'); return; }
+  }
+
   const url = document.getElementById('sheets-url').value.trim();
   if (!url) { toast('Save a Google Apps Script URL first', 'er'); return; }
 
   const statusEl = document.getElementById('sheets-status');
   statusEl.textContent = `Building employee name map…`;
 
-  // Fetch all workplace members for name mapping
-  const { data: members, error: membersErr } = await sb.from('workplace_members')
-    .select('user_id, profile:profiles(full_name)')
-    .eq('workplace_id', S.workplace.id);
-  if (membersErr) { toast(membersErr.message, 'er'); statusEl.textContent = ''; return; }
-  
-  const nameMap = {};
-  (members || []).forEach(m => {
-    nameMap[m.user_id] = m.profile?.full_name || m.user_id;
-  });
-
-  statusEl.textContent = `Fetching ${type === 'time_entries' ? 'time entries' : 'time off requests'}…`;
-  let rows = [];
-  if (type === 'time_entries') {
-    const { data, error } = await sb
-      .from('time_entries')
-      .select('id, user_id, clock_in, clock_out, notes')
-      .eq('workplace_id', S.workplace.id)
-      .order('clock_in', { ascending: false });
-    if (error) { toast(error.message, 'er'); statusEl.textContent = ''; return; }
-    rows = (data || []).map(r => ({
-      id:       r.id,
-      employee: nameMap[r.user_id] || r.user_id,
-      clock_in: r.clock_in  ? new Date(r.clock_in).toLocaleString()  : '',
-      clock_out: r.clock_out ? new Date(r.clock_out).toLocaleString() : '',
-      hours:    r.clock_in && r.clock_out
-                  ? ((new Date(r.clock_out) - new Date(r.clock_in)) / 3600000).toFixed(2)
-                  : '',
-      notes:    r.notes || '',
-    }));
-  } else {
-    const { data, error } = await sb
-      .from('time_off_requests')
-      .select('id, user_id, start_date, end_date, reason, notes, status, created_at')
-      .eq('workplace_id', S.workplace.id)
-      .order('created_at', { ascending: false });
-    if (error) { toast(error.message, 'er'); statusEl.textContent = ''; return; }
-    rows = (data || []).map(r => ({
-      id:       r.id,
-      employee: nameMap[r.user_id] || r.user_id,
-      start_date: r.start_date || '',
-      end_date: r.end_date   || '',
-      days:     r.start_date && r.end_date
-                  ? Math.round((new Date(r.end_date+'T12:00') - new Date(r.start_date+'T12:00')) / 86400000) + 1
-                  : 1,
-      reason:   r.reason || '',
-      notes:    r.notes  || '',
-      status:   r.status,
-      requested: new Date(r.created_at).toLocaleString(),
-    }));
-  }
-
-  const sheetName = type === 'time_entries' ? 'Time Entries' : 'Time Off';
-  statusEl.textContent = `Sending ${rows.length} rows to Google Sheets…`;
-
   try {
+    const { data: members } = await sb.from('workplace_members')
+      .select('user_id')
+      .eq('workplace_id', S.workplace.id);
+    
+    let nameMap = {};
+    if (members?.length) {
+      const userIds = members.map(m => m.user_id);
+      const { data: profiles } = await sb.from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+      (profiles || []).forEach(p => {
+        nameMap[p.id] = p.full_name || p.id;
+      });
+    }
+
+    statusEl.textContent = `Fetching ${type === 'time_entries' ? 'time entries' : 'time off requests'}…`;
+    let rows = [];
+    if (type === 'time_entries') {
+      const { data, error } = await sb
+        .from('time_entries')
+        .select('id, user_id, clock_in, clock_out, notes')
+        .eq('workplace_id', S.workplace.id)
+        .order('clock_in', { ascending: false });
+      if (error) throw error;
+      rows = (data || []).map(r => ({
+        id:       r.id,
+        employee: nameMap[r.user_id] || r.user_id,
+        clock_in: r.clock_in  ? new Date(r.clock_in).toLocaleString()  : '',
+        clock_out: r.clock_out ? new Date(r.clock_out).toLocaleString() : '',
+        hours:    r.clock_in && r.clock_out
+                    ? ((new Date(r.clock_out) - new Date(r.clock_in)) / 3600000).toFixed(2)
+                    : '',
+        notes:    r.notes || '',
+      }));
+    } else {
+      const { data, error } = await sb
+        .from('time_off_requests')
+        .select('id, user_id, start_date, end_date, reason, notes, status, created_at')
+        .eq('workplace_id', S.workplace.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      rows = (data || []).map(r => ({
+        id:       r.id,
+        employee: nameMap[r.user_id] || r.user_id,
+        start_date: r.start_date || '',
+        end_date: r.end_date   || '',
+        days:     r.start_date && r.end_date
+                    ? Math.round((new Date(r.end_date+'T12:00') - new Date(r.start_date+'T12:00')) / 86400000) + 1
+                    : 1,
+        reason:   r.reason || '',
+        notes:    r.notes  || '',
+        status:   r.status,
+        requested: new Date(r.created_at).toLocaleString(),
+      }));
+    }
+
+    const sheetName = type === 'time_entries' ? 'Time Entries' : 'Time Off';
+    statusEl.textContent = `Sending ${rows.length} rows to Google Sheets…`;
+
     const res = await fetch(url, {
       method: 'POST',
       body: JSON.stringify({ sheet: sheetName, clear: true, rows }),
