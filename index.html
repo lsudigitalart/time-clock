@@ -432,7 +432,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <div class="ph">
         <div>
           <div class="ph-title" id="greeting">Welcome back</div>
-          <div class="ph-sub"  id="cur-date"></div>
+          <input type="number" id="aco-h" class="inp" value="8" placeholder="8" min=".5" max="24" step=".5">
         </div>
       </div>
 
@@ -1129,7 +1129,7 @@ function setClockOutUI() {
    ═══════════════════════════════════════════════ */
 function openClockInModal() {
   document.getElementById('ci-notes').value = '';
-  document.getElementById('aco-h').value = '';
+  document.getElementById('aco-h').value = '8';
   document.getElementById('aco-t').value = '';
   acoMode('none', document.querySelector('.aco-tab'));
   openModal('m-clockin');
