@@ -1019,6 +1019,7 @@ function onLogout() {
   document.querySelectorAll('.nav-btn').forEach((b,i)=> b.classList.toggle('on', i===0));
   document.getElementById('nav-avatar').textContent   = '?';
   document.getElementById('nav-username').textContent = 'Account';
+  closeModal();
 }
 
 async function doSignout() {
