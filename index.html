@@ -768,6 +768,13 @@ async function onLogin(user) {
         name: m.workplace_name, admin_id: user.id, hours_per_week: 40
       }).select().single();
       if (wp) await sb.from('workplace_members').insert({ workplace_id: wp.id, user_id: user.id, role: 'admin' });
+    } else if (prof?.role === 'admin') {
+      // Fallback for admin accounts created before metadata was set.
+      const { data: existingWp } = await sb.from('workplaces')
+        .select('id').eq('admin_id', user.id).limit(1).maybeSingle();
+      if (existingWp) {
+        await sb.from('workplace_members').insert({ workplace_id: existingWp.id, user_id: user.id, role: 'admin' });
+      }
     } else if (prof?.role === 'user' && m.workplace_id) {
       await sb.from('workplace_members').insert({ workplace_id: m.workplace_id, user_id: user.id, role: 'member' });
     }
@@ -789,10 +796,13 @@ async function onLogin(user) {
 async function loadWorkplace() {
   const { data } = await sb.from('workplace_members')
     .select('*, workplace:workplaces(*)')
-    .eq('user_id', S.user.id).single();
+    .eq('user_id', S.user.id).limit(1).maybeSingle();
   if (data?.workplace) {
     S.workplace = data.workplace;
     document.getElementById('nav-wp-name').textContent = data.workplace.name;
+  } else {
+    S.workplace = null;
+    document.getElementById('nav-wp-name').textContent = 'No workplace';
   }
 }
 
@@ -895,6 +905,14 @@ function acoMode(mode, btn) {
 }
 
 async function doClockIn() {
+  if (!S.workplace?.id) {
+    await loadWorkplace();
+    if (!S.workplace?.id) {
+      toast('No workplace assigned. Ask your admin to add you, then sign out/in.', 'er');
+      return;
+    }
+  }
+
   let autoAt = null;
   if (S.acoActiveMode === 'hours') {
     const h = parseFloat(document.getElementById('aco-h').value);
@@ -1098,6 +1116,10 @@ async function loadHistory() {
    TIME OFF
    ═══════════════════════════════════════════════ */
 function openTimeOffModal() {
+  if (!S.workplace?.id) {
+    toast('No workplace assigned. Ask your admin to add you, then sign out/in.', 'er');
+    return;
+  }
   document.getElementById('to-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('to-hrs').value = '8';
   document.getElementById('to-notes').value = '';
@@ -1105,6 +1127,14 @@ function openTimeOffModal() {
 }
 
 async function submitTimeOff() {
+  if (!S.workplace?.id) {
+    await loadWorkplace();
+    if (!S.workplace?.id) {
+      toast('No workplace assigned. Ask your admin to add you, then sign out/in.', 'er');
+      return;
+    }
+  }
+
   const date = document.getElementById('to-date').value;
   const hrs  = parseFloat(document.getElementById('to-hrs').value);
   if (!date || !hrs) { toast('Fill in required fields', 'er'); return; }
