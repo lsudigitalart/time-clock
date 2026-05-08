@@ -1846,6 +1846,7 @@ function showOnly(id) {
   document.getElementById('overlay').classList.add('on');
 }
 function closeModal() {
+  document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
   document.getElementById('overlay').classList.remove('on');
 }
 function overlayClick(e) {
