@@ -591,6 +591,32 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <tbody id="tb-adm-to"><tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No requests</div></div></td></tr></tbody>
         </table></div>
       </div>
+
+      <div class="card sec" id="adm-sheets-card">
+        <div class="card-title flex-center jb" style="margin-bottom:1rem">
+          <div class="flex-center gap2"><div class="card-dot"></div> Sync to Google Sheets</div>
+        </div>
+        <p class="hint" style="margin-bottom:1rem">Paste your Google Apps Script web-app URL below, then sync either dataset to a connected Google Sheet. <button class="btn btn-ghost btn-sm" onclick="toggleScriptHelp()" style="margin-left:.4rem">How to set up ›</button></p>
+        <div id="sheets-help" style="display:none;margin-bottom:1rem">
+          <p class="hint" style="margin-bottom:.4rem">1. Open <strong>script.google.com</strong> → New project.<br>2. Replace the default code with the script below.<br>3. Click <em>Deploy → New deployment → Web app</em>. Set <em>Execute as: Me</em> and <em>Who has access: Anyone</em>.<br>4. Copy the web-app URL and paste it here.</p>
+          <div style="position:relative">
+            <textarea id="sheets-script-tmpl" class="inp" rows="10" readonly style="font-family:var(--ff-mono);font-size:.72rem;resize:none;white-space:pre"></textarea>
+            <button class="btn btn-ghost btn-sm" style="position:absolute;top:.4rem;right:.4rem" onclick="copyScriptTemplate()">Copy</button>
+          </div>
+        </div>
+        <div class="fld">
+          <label class="lbl">Apps Script Web App URL</label>
+          <div class="flex-center gap2">
+            <input type="url" id="sheets-url" class="inp" placeholder="https://script.google.com/macros/s/…/exec">
+            <button class="btn btn-primary btn-sm" onclick="saveSheetUrl()">Save</button>
+          </div>
+        </div>
+        <div class="flex-center gap2" style="margin-top:.75rem;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="syncToSheets('time_entries')">⬆ Sync Time Entries</button>
+          <button class="btn btn-primary" onclick="syncToSheets('time_off_requests')">⬆ Sync Time Off</button>
+        </div>
+        <div id="sheets-status" style="margin-top:.6rem;font-size:.8rem;color:var(--text2)"></div>
+      </div>
     </div>
   </main>
 </div>
@@ -1411,6 +1437,11 @@ async function loadAdminPage() {
   const inviteLink = `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(inviteCode)}`;
   document.getElementById('adm-invite-code').value = inviteCode;
   document.getElementById('adm-invite-link').value = inviteLink;
+  // restore saved sheets URL
+  const savedUrl = localStorage.getItem('sheets_url_' + S.workplace.id) || '';
+  document.getElementById('sheets-url').value = savedUrl;
+  // populate script template
+  document.getElementById('sheets-script-tmpl').value = buildScriptTemplate();
   await Promise.all([loadAdminEmployees(), loadAdminTimeOff(), loadAdminStats()]);
 }
 
@@ -1511,6 +1542,125 @@ async function setToStatus(id, status) {
   if (error) { toast(error.message,'er'); return; }
   toast(`Request ${status}!`, 'ok');
   await loadAdminTimeOff();
+}
+
+/* ═══════════════════════════════════════════════
+   GOOGLE SHEETS SYNC
+   ═══════════════════════════════════════════════ */
+function buildScriptTemplate() {
+  return `function doPost(e) {
+  try {
+    var payload = JSON.parse(e.postData.contents);
+    var sheet = SpreadsheetApp.getActiveSpreadsheet()
+      .getSheetByName(payload.sheet) ||
+      SpreadsheetApp.getActiveSpreadsheet().insertSheet(payload.sheet);
+
+    if (payload.clear) sheet.clearContents();
+
+    var rows = payload.rows;
+    if (rows && rows.length > 0) {
+      if (sheet.getLastRow() === 0) {
+        sheet.appendRow(Object.keys(rows[0]));
+      }
+      rows.forEach(function(row) {
+        sheet.appendRow(Object.values(row));
+      });
+    }
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: true, written: rows.length }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+}
+
+function toggleScriptHelp() {
+  const el = document.getElementById('sheets-help');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function copyScriptTemplate() {
+  navigator.clipboard.writeText(document.getElementById('sheets-script-tmpl').value);
+  toast('Script copied!', 'ok');
+}
+
+function saveSheetUrl() {
+  const url = document.getElementById('sheets-url').value.trim();
+  if (!url) { toast('Paste a web-app URL first', 'er'); return; }
+  localStorage.setItem('sheets_url_' + S.workplace.id, url);
+  toast('URL saved!', 'ok');
+}
+
+async function syncToSheets(type) {
+  const url = document.getElementById('sheets-url').value.trim();
+  if (!url) { toast('Save a Google Apps Script URL first', 'er'); return; }
+
+  const statusEl = document.getElementById('sheets-status');
+  statusEl.textContent = `Fetching ${type === 'time_entries' ? 'time entries' : 'time off requests'}…`;
+
+  let rows = [];
+  if (type === 'time_entries') {
+    const { data, error } = await sb
+      .from('time_entries')
+      .select('id, user_id, profile:profiles(full_name), workplace_id, clock_in, clock_out, notes, created_at')
+      .eq('workplace_id', S.workplace.id)
+      .order('clock_in', { ascending: false });
+    if (error) { toast(error.message, 'er'); statusEl.textContent = ''; return; }
+    rows = (data || []).map(r => ({
+      id:          r.id,
+      employee:    r.profile?.full_name || r.user_id,
+      clock_in:    r.clock_in  ? new Date(r.clock_in).toLocaleString()  : '',
+      clock_out:   r.clock_out ? new Date(r.clock_out).toLocaleString() : '',
+      hours:       r.clock_in && r.clock_out
+                     ? ((new Date(r.clock_out) - new Date(r.clock_in)) / 3600000).toFixed(2)
+                     : '',
+      notes:       r.notes || '',
+    }));
+  } else {
+    const { data, error } = await sb
+      .from('time_off_requests')
+      .select('id, user_id, profile:profiles(full_name), start_date, end_date, reason, notes, status, created_at')
+      .eq('workplace_id', S.workplace.id)
+      .order('created_at', { ascending: false });
+    if (error) { toast(error.message, 'er'); statusEl.textContent = ''; return; }
+    rows = (data || []).map(r => ({
+      id:         r.id,
+      employee:   r.profile?.full_name || r.user_id,
+      start_date: r.start_date || '',
+      end_date:   r.end_date   || '',
+      days:       r.start_date && r.end_date
+                    ? Math.round((new Date(r.end_date+'T12:00') - new Date(r.start_date+'T12:00')) / 86400000) + 1
+                    : 1,
+      reason:     r.reason || '',
+      notes:      r.notes  || '',
+      status:     r.status,
+      requested:  new Date(r.created_at).toLocaleString(),
+    }));
+  }
+
+  const sheetName = type === 'time_entries' ? 'Time Entries' : 'Time Off';
+  statusEl.textContent = `Sending ${rows.length} rows to Google Sheets…`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({ sheet: sheetName, clear: true, rows }),
+    });
+    const json = await res.json();
+    if (json.ok) {
+      statusEl.textContent = `✓ Synced ${json.written} rows to "${sheetName}" tab.`;
+      toast(`Synced ${json.written} rows!`, 'ok');
+    } else {
+      statusEl.textContent = `Error: ${json.error}`;
+      toast(json.error, 'er');
+    }
+  } catch (err) {
+    statusEl.textContent = `Network error: ${err.message}`;
+    toast('Sync failed — check the URL and try again', 'er');
+  }
 }
 
 function openEditWpModal() {
