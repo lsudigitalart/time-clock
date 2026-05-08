@@ -326,8 +326,23 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button type="submit" class="btn btn-primary btn-full btn-lg" id="l-btn">Sign In</button>
       <p class="hint" style="text-align:center;margin-top:1rem">
         No account? <a href="#" onclick="authTab('signup');return false" style="color:var(--amber)">Create one</a>
+        &nbsp;&middot;&nbsp;
+        <a href="#" onclick="authTab('reset');return false" style="color:var(--amber)">Forgot password?</a>
       </p>
     </form>
+
+    <!-- RESET PASSWORD -->
+    <div class="auth-form" id="f-reset">
+      <p class="hint" style="margin-bottom:1rem">Enter your email and we’ll send you a link to reset your password.</p>
+      <div class="fld"><label class="lbl">Email</label>
+        <input type="email" id="r-email" class="inp" placeholder="you@company.com"></div>
+      <div id="r-err" class="err-msg"></div>
+      <div id="r-ok"  class="ok-msg"></div>
+      <button class="btn btn-primary btn-full" id="r-btn" onclick="doResetPassword()">Send Reset Link</button>
+      <p class="hint" style="text-align:center;margin-top:1rem">
+        <a href="#" onclick="authTab('login');return false" style="color:var(--amber)">← Back to sign in</a>
+      </p>
+    </div>
 
     <!-- SIGNUP -->
     <form class="auth-form" id="f-signup" onsubmit="doSignup(event)">
@@ -665,6 +680,7 @@ function authTab(t) {
   document.querySelectorAll('.auth-tab').forEach((el,i)=> el.classList.toggle('on',(t==='login'?i===0:i===1)));
   document.getElementById('f-login').classList.toggle('on',  t==='login');
   document.getElementById('f-signup').classList.toggle('on', t==='signup');
+  document.getElementById('f-reset').classList.toggle('on',  t==='reset');
 }
 
 function roleChange() {
@@ -728,6 +744,25 @@ async function doSignup(e) {
   } else {
     okEl.textContent = '✓ Check your email to confirm, then sign in!'; okEl.classList.add('on');
   }
+}
+
+async function doResetPassword() {
+  const errEl = document.getElementById('r-err');
+  const okEl  = document.getElementById('r-ok');
+  const btn   = document.getElementById('r-btn');
+  errEl.classList.remove('on'); okEl.classList.remove('on');
+
+  const email = document.getElementById('r-email').value.trim();
+  if (!email) { errEl.textContent = 'Please enter your email.'; errEl.classList.add('on'); return; }
+
+  btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Sending…';
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: EMAIL_REDIRECT_TO,
+  });
+  btn.disabled = false; btn.textContent = 'Send Reset Link';
+
+  if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
+  okEl.textContent = '✓ Check your inbox for a reset link!'; okEl.classList.add('on');
 }
 
 async function doLogin(e) {
