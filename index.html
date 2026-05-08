@@ -1133,7 +1133,8 @@ function openClockInModal() {
   document.getElementById('ci-notes').value = '';
   document.getElementById('aco-h').value = '8';
   document.getElementById('aco-t').value = '';
-  acoMode('none', document.querySelector('.aco-tab'));
+  const hoursTab = document.querySelectorAll('.aco-tab')[1];
+  acoMode('hours', hoursTab);
   openModal('m-clockin');
 }
 
