@@ -765,8 +765,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div id="p-err" class="err-msg" style="margin-top:.75rem"></div>
     <div id="p-ok"  class="ok-msg"  style="margin-top:.75rem"></div>
 
-    <div class="m-footer" style="border-top:1px solid var(--border);margin-top:1.5rem;padding-top:1rem;justify-content:flex-end">
-      <button class="btn btn-danger btn-sm" onclick="doSignout()">Sign Out</button>
+    <div class="m-footer" style="border-top:1px solid var(--border);margin-top:1.5rem;padding-top:1rem;justify-content:space-between">
+      <button class="btn btn-danger btn-sm" onclick="deleteOwnAccount()">Delete Account</button>
+      <button class="btn btn-ghost btn-sm" onclick="doSignout()">Sign Out</button>
     </div>
   </div>
 
@@ -1663,9 +1664,10 @@ async function loadAdminEmployees() {
     (entries||[]).forEach(e => wh += (new Date(e.clock_out)-new Date(e.clock_in))/3600000);
     const target = S.workplace.hours_per_week || 40;
     const pct = Math.min((wh/target)*100,100);
-    return `<div class="emp-row" style="cursor:pointer" onclick="openAdminEmpHistory('${uid}','${m.profile?.full_name||'Employee'}')" title="View &amp; edit history">
+    const name = m.profile?.full_name || 'Unknown';
+    return `<div class="emp-row" style="cursor:pointer" onclick="openAdminEmpHistory('${uid}','${name}')" title="View &amp; edit history">
       <div>
-        <div class="emp-name">${m.profile?.full_name || 'Unknown'}</div>
+        <div class="emp-name">${name}</div>
         <div class="emp-role">${m.role==='admin'?'👑 Admin':'👤 Employee'}</div>
       </div>
       <div>
@@ -1674,6 +1676,9 @@ async function loadAdminEmployees() {
           <div class="prog-bar" style="width:${pct}%"></div>
         </div>
         <div class="emp-hrs-sub" style="font-size:.7rem">${pct.toFixed(0)}% this week &middot; <span style="color:var(--accent)">View history ›</span></div>
+      </div>
+      <div onclick="event.stopPropagation()">
+        <button class="btn btn-danger btn-sm" onclick="adminDeleteEmployee('${uid}','${name}')">Delete</button>
       </div>
     </div>`;
   }));
@@ -1964,6 +1969,35 @@ async function saveProfilePassword() {
   document.getElementById('p-pass1').value = '';
   document.getElementById('p-pass2').value = '';
   okEl.textContent = '✓ Password updated!'; okEl.classList.add('on');
+}
+
+async function deleteOwnAccount() {
+  if (!confirm('Permanently delete your account and all your data? This cannot be undone.')) return;
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(`${SB_URL}/functions/v1/delete-account`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+    body: JSON.stringify({}),
+  });
+  const data = await res.json();
+  if (!res.ok) { toast(data.error || 'Delete failed', 'er'); return; }
+  toast('Account deleted.', 'ok');
+  onLogout();
+  await sb.auth.signOut();
+}
+
+async function adminDeleteEmployee(userId, name) {
+  if (!confirm(`Permanently delete ${name}'s account and all their data? This cannot be undone.`)) return;
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(`${SB_URL}/functions/v1/delete-account`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+    body: JSON.stringify({ target_user_id: userId }),
+  });
+  const data = await res.json();
+  if (!res.ok) { toast(data.error || 'Delete failed', 'er'); return; }
+  toast(`${name}'s account deleted.`, 'ok');
+  await loadAdminEmployees();
 }
 
 function normalizeInviteCode(value) {
