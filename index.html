@@ -599,14 +599,15 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <p class="hint" style="margin-bottom:1rem">Paste your Google Apps Script web-app URL below, then sync either dataset to a connected Google Sheet. <button class="btn btn-ghost btn-sm" onclick="toggleScriptHelp()" style="margin-left:.4rem">How to set up ›</button></p>
         <div id="sheets-help" style="display:none;margin-bottom:1rem">
           <p class="hint" style="margin-bottom:.4rem"><strong>Setup steps:</strong><br>
-          1. Open <strong>script.google.com</strong> → New project.<br>
-          2. Replace the default code with the script below.<br>
-          3. Click <em>Deploy → New deployment → Web app</em>:<br>
+          1. Open <strong>Google Sheets</strong> and create a new blank spreadsheet.<br>
+          2. Click <strong>Extensions → Apps Script</strong> (this opens the editor linked to that sheet).<br>
+          3. Replace all the default code with the script below.<br>
+          4. Click <strong>Deploy → New deployment → Web app</strong>:<br>
           &nbsp;&nbsp; • Execute as: <strong>Me</strong><br>
           &nbsp;&nbsp; • Who has access: <strong>Anyone</strong><br>
-          4. Grant permissions when prompted.<br>
-          5. Copy the web-app URL and paste it below.<br>
-          <strong>Note:</strong> If you get a CORS error after pasting the URL, it means you need to <strong>redeploy</strong> the script. Go back to script.google.com → Deploy (top right) → Choose the existing web app deployment → Click the three dots → Delete. Then create a new deployment following the steps above.</p>
+          5. Grant permissions when prompted.<br>
+          6. Copy the web-app URL and paste it below.<br>
+          <strong>Note:</strong> If you later get a CORS error, you need to delete the old deployment and create a new one. Go to Deploy (top right) → Manage deployments → Click the three dots on the web app → Delete. Then create a new deployment following steps 4-6.</p>
           <div style="position:relative">
             <textarea id="sheets-script-tmpl" class="inp" rows="12" readonly style="font-family:var(--ff-mono);font-size:.72rem;resize:none;white-space:pre"></textarea>
             <button class="btn btn-ghost btn-sm" style="position:absolute;top:.4rem;right:.4rem" onclick="copyScriptTemplate()">Copy</button>
