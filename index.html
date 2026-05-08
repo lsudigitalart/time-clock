@@ -2061,8 +2061,12 @@ function applyInviteFromUrl() {
   if (!invite) return;
   const inviteEl = document.getElementById('s-invite');
   if (inviteEl) inviteEl.value = invite;
-  const userRole = document.getElementById('r-user');
-  if (userRole) userRole.checked = true;
+  
+  // If admin invite code (ends with :admin), select admin button; otherwise employee
+  const isAdminInvite = invite.endsWith(':admin');
+  const roleEl = isAdminInvite ? document.getElementById('r-admin') : document.getElementById('r-user');
+  if (roleEl) roleEl.checked = true;
+  
   roleChange();
   authTab('signup');
 }
