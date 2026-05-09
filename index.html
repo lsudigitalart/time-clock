@@ -787,6 +787,15 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <p class="hint">A confirmation link will be sent to your new address.</p>
     </div>
 
+    <div class="fld">
+      <label class="lbl">Planned Hours / Week</label>
+      <div class="flex-center gap2">
+        <input type="number" id="p-planned-hours" class="inp" placeholder="Use workplace default" min="1" max="168" step="0.5">
+        <button class="btn btn-primary btn-sm" onclick="saveProfilePlannedHours()">Save</button>
+      </div>
+      <p class="hint">Leave blank to use your workplace default schedule.</p>
+    </div>
+
     <div class="fld" style="margin-bottom:0">
       <label class="lbl">Change Password</label>
       <input type="password" id="p-pass1" class="inp" placeholder="New password (min 6 characters)" style="margin-bottom:.5rem">
@@ -1353,7 +1362,8 @@ async function loadWeekProgress() {
     if (ci >= start && ci <= end) hrs += (Date.now() - ci.getTime()) / 3600000;
   }
 
-  const target = S.workplace?.hours_per_week || 40;
+  const personalTarget = Number(S.profile?.planned_hours_per_week) || null;
+  const target = personalTarget || S.workplace?.hours_per_week || 40;
   const pct    = Math.min((hrs / target) * 100, 100);
   const rem    = Math.max(target - hrs, 0);
 
@@ -1733,7 +1743,7 @@ async function saveEditEntry() {
 
 async function loadAdminEmployees() {
   const { data: members } = await sb.from('workplace_members')
-    .select('*, profile:profiles(id,full_name,role,email)')
+    .select('*, profile:profiles(id,full_name,role,email,planned_hours_per_week)')
     .eq('workplace_id', S.workplace.id);
 
   const list = document.getElementById('adm-emp-list');
@@ -1750,7 +1760,7 @@ async function loadAdminEmployees() {
       .eq('user_id',uid).gte('clock_in',start.toISOString()).lte('clock_in',end.toISOString()).not('clock_out','is',null);
     let wh = 0;
     (entries||[]).forEach(e => wh += (new Date(e.clock_out)-new Date(e.clock_in))/3600000);
-    const target = S.workplace.hours_per_week || 40;
+    const target = Number(m.profile?.planned_hours_per_week) || S.workplace.hours_per_week || 40;
     const pct = Math.min((wh/target)*100,100);
     const name = m.profile?.full_name || 'Unknown';
     const email = m.profile?.email || '';
@@ -2034,6 +2044,7 @@ async function saveWorkplace() {
 function openProfileModal() {
   document.getElementById('p-name').value  = S.profile?.full_name || '';
   document.getElementById('p-email').value = S.user?.email || '';
+  document.getElementById('p-planned-hours').value = S.profile?.planned_hours_per_week ?? '';
   document.getElementById('p-pass1').value = '';
   document.getElementById('p-pass2').value = '';
   document.getElementById('p-err').classList.remove('on');
@@ -2066,6 +2077,28 @@ async function saveProfileEmail() {
   const { error } = await sb.auth.updateUser({ email }, { emailRedirectTo: EMAIL_REDIRECT_TO });
   if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
   okEl.textContent = '✓ Check your new email address for a confirmation link.'; okEl.classList.add('on');
+}
+
+async function saveProfilePlannedHours() {
+  const errEl = document.getElementById('p-err');
+  const okEl  = document.getElementById('p-ok');
+  errEl.classList.remove('on'); okEl.classList.remove('on');
+
+  const raw = document.getElementById('p-planned-hours').value.trim();
+  const plannedHours = raw === '' ? null : parseFloat(raw);
+  if (raw !== '' && (!Number.isFinite(plannedHours) || plannedHours < 1 || plannedHours > 168)) {
+    errEl.textContent = 'Planned hours must be between 1 and 168, or left blank.';
+    errEl.classList.add('on');
+    return;
+  }
+
+  const { error } = await sb.from('profiles').update({ planned_hours_per_week: plannedHours }).eq('id', S.user.id);
+  if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
+
+  S.profile.planned_hours_per_week = plannedHours;
+  okEl.textContent = plannedHours == null ? '✓ Planned hours cleared. Using workplace default.' : '✓ Planned hours updated!';
+  okEl.classList.add('on');
+  await loadWeekProgress();
 }
 
 async function saveProfilePassword() {

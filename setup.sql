@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   full_name     text,
   role          text NOT NULL DEFAULT 'user',   -- 'user' | 'admin'
   email         text,
+  planned_hours_per_week numeric,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
