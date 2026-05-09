@@ -1421,6 +1421,7 @@ async function loadRecentEntries() {
    ═══════════════════════════════════════════════ */
 function buildMonthFilter() {
   const sel = document.getElementById('hist-month');
+  if (!sel || sel.options.length > 0) return;
   const now = new Date();
   for (let i = 0; i < 6; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -1433,7 +1434,15 @@ function buildMonthFilter() {
 }
 
 async function loadHistory() {
-  const [yr, mo] = document.getElementById('hist-month').value.split('-').map(Number);
+  const monthSel = document.getElementById('hist-month');
+  if (!monthSel || !monthSel.value) {
+    buildMonthFilter();
+  }
+  const monthValue = (monthSel && monthSel.value) ? monthSel.value : (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  })();
+  const [yr, mo] = monthValue.split('-').map(Number);
   const s = new Date(yr, mo-1, 1), e = new Date(yr, mo, 0, 23, 59, 59);
 
   const [{ data: entries }, { data: tos }] = await Promise.all([
