@@ -604,7 +604,10 @@ tr:hover td{background:rgba(255,255,255,.015)}
       </div>
 
       <div class="card sec">
-        <div class="card-title"><div class="card-dot"></div> Time Off Requests</div>
+        <div class="card-title flex-center jb" style="margin-bottom:1rem">
+          <div class="flex-center gap2"><div class="card-dot"></div> Time Off Requests</div>
+          <button class="btn btn-ghost btn-sm" id="adm-to-toggle" onclick="toggleAdminTimeOffView()">Show Archived</button>
+        </div>
         <div class="tbl-wrap"><table>
           <thead><tr><th>Employee</th><th>Date</th><th>Hours</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="tb-adm-to"><tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No requests</div></div></td></tr></tbody>
@@ -828,6 +831,7 @@ const S = {
   clockTick: null,           // setInterval for elapsed display
   acoTimer: null,            // setTimeout for auto clock-out
   acoActiveMode: 'none',
+  adminTimeOffArchived: false,
 };
 
 /* ═══════════════════════════════════════════════
@@ -1738,13 +1742,17 @@ async function loadAdminStats() {
 }
 
 async function loadAdminTimeOff() {
+  const showArchived = S.adminTimeOffArchived === true;
   const { data } = await sb.from('time_off_requests')
     .select('*, profile:profiles(full_name)')
     .eq('workplace_id',S.workplace.id)
+    .eq('archived', showArchived)
     .order('created_at',{ascending:false}).limit(30);
   const tb = document.getElementById('tb-adm-to');
+  const toggleBtn = document.getElementById('adm-to-toggle');
+  if (toggleBtn) toggleBtn.textContent = showArchived ? 'Show Active' : 'Show Archived';
   if (!data?.length) {
-    tb.innerHTML='<tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No requests</div></div></td></tr>'; return;
+    tb.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No ${showArchived ? 'archived' : 'active'} requests</div></div></td></tr>`; return;
   }
   tb.innerHTML = data.map(t => {
     const sc = t.status==='approved'?'bg':t.status==='denied'?'br':'ba';
@@ -1760,12 +1768,30 @@ async function loadAdminTimeOff() {
       <td class="td-mono">${days} day${days===1?'':'s'}</td>
       <td>${t.reason||'—'}</td>
       <td><span class="badge ${sc}">${t.status}</span></td>
-      <td>${t.status==='pending'?`<div class="gap2">
+      <td>${showArchived ? `
+        <button class="btn btn-ghost btn-sm" onclick="toggleTimeOffArchive('${t.id}', false)">Restore</button>
+      ` : `<div class="gap2">
         <button class="btn btn-success btn-sm" onclick="setToStatus('${t.id}','approved')">✓ Approve</button>
         <button class="btn btn-danger  btn-sm" onclick="setToStatus('${t.id}','denied')">✕ Deny</button>
-      </div>`:'—'}</td>
+        <button class="btn btn-ghost btn-sm" onclick="toggleTimeOffArchive('${t.id}', true)">Archive</button>
+      </div>`}</td>
     </tr>`;
   }).join('');
+}
+
+async function toggleAdminTimeOffView() {
+  S.adminTimeOffArchived = !S.adminTimeOffArchived;
+  await loadAdminTimeOff();
+}
+
+async function toggleTimeOffArchive(id, archived) {
+  const { error } = await sb.from('time_off_requests').update({
+    archived,
+    archived_at: archived ? new Date().toISOString() : null,
+  }).eq('id', id);
+  if (error) { toast(error.message, 'er'); return; }
+  toast(archived ? 'Request archived!' : 'Request restored!', 'ok');
+  await loadAdminTimeOff();
 }
 
 async function saveSchedule() {

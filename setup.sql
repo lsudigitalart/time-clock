@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS public.time_off_requests (
   reason        text,
   notes         text,
   status        text NOT NULL DEFAULT 'pending',  -- 'pending' | 'approved' | 'denied'
+  archived      boolean NOT NULL DEFAULT false,
+  archived_at   timestamptz,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
@@ -252,6 +254,7 @@ CREATE INDEX IF NOT EXISTS idx_time_entries_workplace ON public.time_entries(wor
 CREATE INDEX IF NOT EXISTS idx_time_entries_clock_in  ON public.time_entries(clock_in);
 CREATE INDEX IF NOT EXISTS idx_time_off_user          ON public.time_off_requests(user_id);
 CREATE INDEX IF NOT EXISTS idx_time_off_workplace     ON public.time_off_requests(workplace_id);
+CREATE INDEX IF NOT EXISTS idx_time_off_archived      ON public.time_off_requests(archived);
 CREATE INDEX IF NOT EXISTS idx_wm_user                ON public.workplace_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_wm_workplace           ON public.workplace_members(workplace_id);
 
