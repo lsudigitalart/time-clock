@@ -842,6 +842,8 @@ const S = {
   adminTimeOffArchived: false,
 };
 
+const APP_PAGES = ['dashboard', 'history', 'timeoff', 'admin'];
+
 /* ═══════════════════════════════════════════════
    INIT
    ═══════════════════════════════════════════════ */
@@ -895,6 +897,11 @@ function authTab(t) {
   document.getElementById('f-signup').classList.toggle('on', t==='signup');
   document.getElementById('f-reset').classList.toggle('on',  t==='reset');
   document.getElementById('f-update').classList.toggle('on', t==='update');
+}
+
+function getPageFromHash() {
+  const raw = (window.location.hash || '').replace('#', '').trim().toLowerCase();
+  return APP_PAGES.includes(raw) ? raw : 'dashboard';
 }
 
 function isRecoveryLink() {
@@ -1133,6 +1140,7 @@ async function onLogin(user) {
   if (prof?.role === 'admin' || S.memberRole === 'admin') document.getElementById('nav-admin').classList.remove('hidden');
 
   await loadDashboard();
+  goto(getPageFromHash(), false);
 }
 
 async function loadWorkplace() {
@@ -2184,10 +2192,20 @@ async function copyAdminInviteLink() {
 /* ═══════════════════════════════════════════════
    NAV & MODALS
    ═══════════════════════════════════════════════ */
-function goto(page) {
+function goto(page, updateHash = true) {
+  if (!APP_PAGES.includes(page)) page = 'dashboard';
+  if (page === 'admin' && document.getElementById('nav-admin').classList.contains('hidden')) {
+    page = 'dashboard';
+  }
+
   document.querySelectorAll('.page').forEach(p => p.classList.remove('on'));
   document.getElementById('page-'+page).classList.add('on');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('on', b.dataset.p === page));
+
+  if (updateHash && window.location.hash !== `#${page}`) {
+    window.location.hash = page;
+  }
+
   if (page==='history')  loadHistory();
   if (page==='timeoff')  loadTimeOffRequests();
   if (page==='admin')    loadAdminPage();
