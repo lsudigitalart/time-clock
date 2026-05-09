@@ -1798,7 +1798,6 @@ async function loadAdminTimeOff() {
       ` : `<div class="gap2">
         <button class="btn btn-success btn-sm" onclick="setToStatus('${t.id}','approved')">✓ Approve</button>
         <button class="btn btn-danger  btn-sm" onclick="setToStatus('${t.id}','denied')">✕ Deny</button>
-        <button class="btn btn-ghost btn-sm" onclick="toggleTimeOffArchive('${t.id}', true)">Archive</button>
       </div>`}</td>
     </tr>`;
   }).join('');
@@ -1831,9 +1830,14 @@ async function saveSchedule() {
 }
 
 async function setToStatus(id, status) {
-  const { error } = await sb.from('time_off_requests').update({ status }).eq('id',id);
+  const shouldArchive = status === 'approved' || status === 'denied';
+  const { error } = await sb.from('time_off_requests').update({
+    status,
+    archived: shouldArchive,
+    archived_at: shouldArchive ? new Date().toISOString() : null,
+  }).eq('id',id);
   if (error) { toast(error.message,'er'); return; }
-  toast(`Request ${status}!`, 'ok');
+  toast(`Request ${status}${shouldArchive ? ' and archived' : ''}!`, 'ok');
   await loadAdminTimeOff();
 }
 
