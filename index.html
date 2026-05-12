@@ -661,6 +661,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <div class="adm-cal-modes">
             <button class="btn btn-ghost btn-sm on" id="adm-cal-timeoff-btn" onclick="setAdminCalendarMode('timeoff')">Time Off</button>
             <button class="btn btn-ghost btn-sm" id="adm-cal-worked-btn" onclick="setAdminCalendarMode('worked')">Worked Shifts</button>
+            <button class="btn btn-ghost btn-sm" id="adm-cal-planned-btn" onclick="setAdminCalendarMode('planned')">Planned Shifts</button>
           </div>
           <div class="flex-center gap2">
             <label class="lbl" style="margin:0">Month</label>
@@ -1876,9 +1877,10 @@ async function loadAdminPage() {
 }
 
 function setAdminCalendarMode(mode) {
-  S.adminCalendarMode = mode === 'worked' ? 'worked' : 'timeoff';
+  S.adminCalendarMode = ['timeoff', 'worked', 'planned'].includes(mode) ? mode : 'timeoff';
   document.getElementById('adm-cal-timeoff-btn')?.classList.toggle('on', S.adminCalendarMode === 'timeoff');
   document.getElementById('adm-cal-worked-btn')?.classList.toggle('on', S.adminCalendarMode === 'worked');
+  document.getElementById('adm-cal-planned-btn')?.classList.toggle('on', S.adminCalendarMode === 'planned');
   loadAdminCalendar();
 }
 
@@ -1906,6 +1908,7 @@ async function loadAdminCalendar() {
 
   document.getElementById('adm-cal-timeoff-btn')?.classList.toggle('on', S.adminCalendarMode === 'timeoff');
   document.getElementById('adm-cal-worked-btn')?.classList.toggle('on', S.adminCalendarMode === 'worked');
+  document.getElementById('adm-cal-planned-btn')?.classList.toggle('on', S.adminCalendarMode === 'planned');
 
   const { data: members } = await sb.from('workplace_members')
     .select('user_id, profile:profiles(full_name)')
@@ -1939,7 +1942,7 @@ async function loadAdminCalendar() {
         });
       }
     });
-  } else {
+  } else if (S.adminCalendarMode === 'worked') {
     const { data: entries } = await sb.from('time_entries')
       .select('user_id,clock_in,clock_out')
       .eq('workplace_id', S.workplace.id)
@@ -1955,6 +1958,20 @@ async function loadAdminCalendar() {
       pushDay(key, {
         cls: 'work',
         text: `${names[e.user_id] || 'Employee'} · ${fmtTime(ci)}-${co ? fmtTime(co) : '--'}`,
+      });
+    });
+  } else {
+    const { data: plans } = await sb.from('planned_shifts')
+      .select('user_id,shift_date,start_time,end_time')
+      .eq('workplace_id', S.workplace.id)
+      .gte('shift_date', startKey)
+      .lte('shift_date', endKey)
+      .order('shift_date', { ascending: true });
+
+    (plans || []).forEach(p => {
+      pushDay(p.shift_date, {
+        cls: 'plan',
+        text: `${names[p.user_id] || 'Employee'} · ${String(p.start_time).slice(0,5)}-${String(p.end_time).slice(0,5)}`,
       });
     });
   }
