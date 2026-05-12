@@ -22,6 +22,9 @@
   --amber:    #e8942a;
   --amber-lo: #b87020;
   --amber-gl: rgba(232,148,42,.14);
+  --btn-pri-text: #08090e;
+  --btn-pri-hover: #f5a43a;
+  --btn-pri-shadow: 0 4px 20px rgba(232,148,42,.35);
   --green:    #22c55e;
   --red:      #ef4444;
   --blue:     #3b82f6;
@@ -47,6 +50,9 @@
     --amber:    #c77212;
     --amber-lo: #9a5810;
     --amber-gl: rgba(199,114,18,.14);
+    --btn-pri-text: #ffffff;
+    --btn-pri-hover: #b86610;
+    --btn-pri-shadow: 0 3px 10px rgba(199,114,18,.22);
     --green:    #15803d;
     --red:      #dc2626;
     --blue:     #2563eb;
@@ -152,9 +158,10 @@ select.inp{cursor:pointer;appearance:none;
   padding:.6rem 1.2rem;border-radius:var(--r);font-size:.875rem;font-weight:700;
   border:none;cursor:pointer;transition:all var(--ease);font-family:var(--ff-disp);
   letter-spacing:.04em;white-space:nowrap}
-.btn-primary{background:var(--amber);color:#08090e}
-.btn-primary:hover{background:#f5a43a;transform:translateY(-1px);box-shadow:0 4px 20px rgba(232,148,42,.35)}
+.btn-primary{background:var(--amber);color:var(--btn-pri-text)}
+.btn-primary:hover{background:var(--btn-pri-hover);transform:translateY(-1px);box-shadow:var(--btn-pri-shadow)}
 .btn-primary:active{transform:none}
+.btn-sm.btn-primary:hover{transform:none;box-shadow:none}
 .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
 .btn-secondary:hover{background:var(--border)}
 .btn-danger{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
