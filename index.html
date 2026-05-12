@@ -259,6 +259,24 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .emp-hrs-val{font-family:var(--ff-mono);font-size:1rem;font-weight:600;color:var(--text)}
 .emp-hrs-sub{font-size:.7rem;color:var(--muted);font-family:var(--ff-mono)}
 
+/* ─── ADMIN CALENDAR ─────────────────────────────────────── */
+.adm-cal-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.9rem}
+.adm-cal-modes{display:flex;gap:.4rem;flex-wrap:wrap}
+.adm-cal-modes .btn.on{background:var(--amber-gl);color:var(--amber);border-color:rgba(232,148,42,.35)}
+.adm-cal-head{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.5rem;margin-bottom:.45rem}
+.adm-cal-head div{font-family:var(--ff-mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:center}
+.adm-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.5rem}
+.adm-cal-pad{border:1px dashed var(--border);border-radius:var(--r);min-height:120px;opacity:.25}
+.adm-cal-day{border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);min-height:120px;padding:.45rem;display:flex;flex-direction:column;gap:.35rem}
+.adm-cal-day-num{font-family:var(--ff-mono);font-size:.72rem;color:var(--text2)}
+.adm-cal-events{display:flex;flex-direction:column;gap:.25rem;min-width:0}
+.adm-cal-evt{font-size:.68rem;border:1px solid var(--border);border-radius:6px;padding:.18rem .35rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.adm-cal-evt.to-approved{color:var(--green);background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.2)}
+.adm-cal-evt.to-denied{color:var(--red);background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.2)}
+.adm-cal-evt.to-pending{color:var(--amber);background:rgba(232,148,42,.08);border-color:rgba(232,148,42,.2)}
+.adm-cal-evt.work{color:var(--blue);background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.2)}
+.adm-cal-more{font-size:.66rem;color:var(--muted);font-family:var(--ff-mono)}
+
 /* ─── EMPTY STATE ────────────────────────────────────────── */
 .empty{text-align:center;padding:2.5rem;color:var(--muted)}
 .empty-icon{font-size:2rem;margin-bottom:.6rem;opacity:.45}
@@ -305,6 +323,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
   .nav-wp{display:none}
   .nav-username{display:none}
   .clock-card{padding:2rem 1rem}
+  .adm-cal-head div{font-size:.62rem}
+  .adm-cal-day{min-height:100px}
+  .adm-cal-evt{font-size:.62rem}
 }
 @media(max-width:480px){
   .g3{grid-template-columns:1fr}
@@ -612,6 +633,24 @@ tr:hover td{background:rgba(255,255,255,.015)}
       </div>
 
       <div class="card sec">
+        <div class="card-title"><div class="card-dot"></div> Team Calendar</div>
+        <div class="adm-cal-toolbar">
+          <div class="adm-cal-modes">
+            <button class="btn btn-ghost btn-sm on" id="adm-cal-timeoff-btn" onclick="setAdminCalendarMode('timeoff')">Time Off</button>
+            <button class="btn btn-ghost btn-sm" id="adm-cal-worked-btn" onclick="setAdminCalendarMode('worked')">Worked Shifts</button>
+          </div>
+          <div class="flex-center gap2">
+            <label class="lbl" style="margin:0">Month</label>
+            <input type="month" id="adm-cal-month" class="inp" style="width:auto" onchange="loadAdminCalendar()">
+          </div>
+        </div>
+        <div class="adm-cal-head">
+          <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+        </div>
+        <div id="adm-cal-grid" class="adm-cal-grid"></div>
+      </div>
+
+      <div class="card sec">
         <div class="card-title flex-center jb" style="margin-bottom:1rem">
           <div class="flex-center gap2"><div class="card-dot"></div> Time Off Requests</div>
           <button class="btn btn-ghost btn-sm" id="adm-to-toggle" onclick="toggleAdminTimeOffView()">Show Archived</button>
@@ -849,6 +888,7 @@ const S = {
   acoTimer: null,            // setTimeout for auto clock-out
   acoActiveMode: 'none',
   adminTimeOffArchived: false,
+  adminCalendarMode: 'timeoff',
 };
 
 const APP_PAGES = ['dashboard', 'history', 'timeoff', 'admin'];
@@ -1629,7 +1669,112 @@ async function loadAdminPage() {
   document.getElementById('sheets-url').value = savedUrl;
   // populate script template
   document.getElementById('sheets-script-tmpl').value = buildScriptTemplate();
-  await Promise.all([loadAdminEmployees(), loadAdminTimeOff(), loadAdminStats()]);
+  const calMonthEl = document.getElementById('adm-cal-month');
+  if (calMonthEl && !calMonthEl.value) {
+    const now = new Date();
+    calMonthEl.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  await Promise.all([loadAdminEmployees(), loadAdminTimeOff(), loadAdminStats(), loadAdminCalendar()]);
+}
+
+function setAdminCalendarMode(mode) {
+  S.adminCalendarMode = mode === 'worked' ? 'worked' : 'timeoff';
+  document.getElementById('adm-cal-timeoff-btn')?.classList.toggle('on', S.adminCalendarMode === 'timeoff');
+  document.getElementById('adm-cal-worked-btn')?.classList.toggle('on', S.adminCalendarMode === 'worked');
+  loadAdminCalendar();
+}
+
+function localDateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+async function loadAdminCalendar() {
+  if (!S.workplace?.id) return;
+  const monthEl = document.getElementById('adm-cal-month');
+  const gridEl = document.getElementById('adm-cal-grid');
+  if (!monthEl || !gridEl) return;
+
+  if (!monthEl.value) {
+    const now = new Date();
+    monthEl.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+
+  const [yr, mo] = monthEl.value.split('-').map(Number);
+  const monthStart = new Date(yr, mo - 1, 1);
+  const monthEnd = new Date(yr, mo, 0);
+  const monthEndExclusive = new Date(yr, mo, 1);
+  const startKey = localDateKey(monthStart);
+  const endKey = localDateKey(monthEnd);
+
+  document.getElementById('adm-cal-timeoff-btn')?.classList.toggle('on', S.adminCalendarMode === 'timeoff');
+  document.getElementById('adm-cal-worked-btn')?.classList.toggle('on', S.adminCalendarMode === 'worked');
+
+  const { data: members } = await sb.from('workplace_members')
+    .select('user_id, profile:profiles(full_name)')
+    .eq('workplace_id', S.workplace.id);
+  const names = {};
+  (members || []).forEach(m => { names[m.user_id] = m.profile?.full_name || 'Employee'; });
+
+  const byDay = {};
+  const pushDay = (key, evt) => {
+    if (!byDay[key]) byDay[key] = [];
+    byDay[key].push(evt);
+  };
+
+  if (S.adminCalendarMode === 'timeoff') {
+    const { data: requests } = await sb.from('time_off_requests')
+      .select('user_id,start_date,end_date,status')
+      .eq('workplace_id', S.workplace.id)
+      .lte('start_date', endKey)
+      .gte('end_date', startKey)
+      .order('start_date', { ascending: true });
+
+    (requests || []).forEach(r => {
+      const rs = new Date((r.start_date || startKey) + 'T12:00');
+      const re = new Date((r.end_date || r.start_date || endKey) + 'T12:00');
+      const s = rs < monthStart ? monthStart : rs;
+      const e = re > monthEnd ? monthEnd : re;
+      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+        pushDay(localDateKey(d), {
+          cls: `to-${r.status || 'pending'}`,
+          text: `${names[r.user_id] || 'Employee'} · ${r.status || 'pending'}`,
+        });
+      }
+    });
+  } else {
+    const { data: entries } = await sb.from('time_entries')
+      .select('user_id,clock_in,clock_out')
+      .eq('workplace_id', S.workplace.id)
+      .gte('clock_in', monthStart.toISOString())
+      .lt('clock_in', monthEndExclusive.toISOString())
+      .not('clock_out', 'is', null)
+      .order('clock_in', { ascending: true });
+
+    (entries || []).forEach(e => {
+      const ci = new Date(e.clock_in);
+      const co = e.clock_out ? new Date(e.clock_out) : null;
+      const key = localDateKey(ci);
+      pushDay(key, {
+        cls: 'work',
+        text: `${names[e.user_id] || 'Employee'} · ${fmtTime(ci)}-${co ? fmtTime(co) : '--'}`,
+      });
+    });
+  }
+
+  const firstDow = monthStart.getDay();
+  const daysInMonth = monthEnd.getDate();
+  const cells = [];
+
+  for (let i = 0; i < firstDow; i++) cells.push('<div class="adm-cal-pad"></div>');
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${yr}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const events = byDay[key] || [];
+    const show = events.slice(0, 4).map(ev => `<div class="adm-cal-evt ${ev.cls}">${ev.text}</div>`).join('');
+    const more = events.length > 4 ? `<div class="adm-cal-more">+${events.length - 4} more</div>` : '';
+    cells.push(`<div class="adm-cal-day"><div class="adm-cal-day-num">${day}</div><div class="adm-cal-events">${show}${more}</div></div>`);
+  }
+
+  gridEl.innerHTML = cells.join('') || '<div class="empty" style="grid-column:1/-1">No calendar data</div>';
 }
 
 /* ═══════════════════════════════════════════════
