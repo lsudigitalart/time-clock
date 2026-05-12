@@ -67,6 +67,19 @@ CREATE TABLE IF NOT EXISTS public.time_off_requests (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
+-- Planned shifts (user-entered schedule preferences)
+CREATE TABLE IF NOT EXISTS public.planned_shifts (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  workplace_id  uuid NOT NULL REFERENCES public.workplaces(id) ON DELETE CASCADE,
+  shift_date    date NOT NULL,
+  start_time    time NOT NULL,
+  end_time      time NOT NULL,
+  notes         text,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, shift_date)
+);
+
 
 -- ── 3. AUTH TRIGGER ───────────────────────────────────────────
 -- Automatically creates a profile row when a new user signs up.
@@ -103,6 +116,7 @@ ALTER TABLE public.workplaces          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.workplace_members   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.time_entries        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.time_off_requests   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.planned_shifts      ENABLE ROW LEVEL SECURITY;
 
 
 -- ── profiles ──────────────────────────────────────────────────
@@ -248,6 +262,30 @@ CREATE POLICY "time_off: delete own pending"
   USING (auth.uid() = user_id AND status = 'pending');
 
 
+-- ── planned_shifts ──────────────────────────────────────────
+
+CREATE POLICY "planned_shifts: read own or workplace admin"
+  ON public.planned_shifts FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id OR is_workplace_admin(workplace_id));
+
+CREATE POLICY "planned_shifts: insert own"
+  ON public.planned_shifts FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "planned_shifts: update own"
+  ON public.planned_shifts FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "planned_shifts: delete own"
+  ON public.planned_shifts FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+
 -- ── 5. HELPFUL INDEXES ────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_time_entries_user     ON public.time_entries(user_id);
@@ -256,6 +294,7 @@ CREATE INDEX IF NOT EXISTS idx_time_entries_clock_in  ON public.time_entries(clo
 CREATE INDEX IF NOT EXISTS idx_time_off_user          ON public.time_off_requests(user_id);
 CREATE INDEX IF NOT EXISTS idx_time_off_workplace     ON public.time_off_requests(workplace_id);
 CREATE INDEX IF NOT EXISTS idx_time_off_archived      ON public.time_off_requests(archived);
+CREATE INDEX IF NOT EXISTS idx_planned_shifts_user     ON public.planned_shifts(user_id);
 CREATE INDEX IF NOT EXISTS idx_wm_user                ON public.workplace_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_wm_workplace           ON public.workplace_members(workplace_id);
 

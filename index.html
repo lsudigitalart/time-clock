@@ -275,6 +275,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .adm-cal-evt.to-denied{color:var(--red);background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.2)}
 .adm-cal-evt.to-pending{color:var(--amber);background:rgba(232,148,42,.08);border-color:rgba(232,148,42,.2)}
 .adm-cal-evt.work{color:var(--blue);background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.2)}
+.adm-cal-evt.plan{color:var(--amber);background:rgba(232,148,42,.08);border-color:rgba(232,148,42,.2)}
 .adm-cal-more{font-size:.66rem;color:var(--muted);font-family:var(--ff-mono)}
 
 /* ─── EMPTY STATE ────────────────────────────────────────── */
@@ -443,6 +444,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="nav-links" id="nav-links">
       <button class="nav-btn on" onclick="goto('dashboard')" data-p="dashboard">Dashboard</button>
       <button class="nav-btn"    onclick="goto('history')"   data-p="history">History</button>
+      <button class="nav-btn"    onclick="goto('schedule')"  data-p="schedule">Schedule</button>
       <button class="nav-btn"    onclick="goto('timeoff')"   data-p="timeoff">Time Off</button>
       <button class="nav-btn hidden" onclick="goto('admin')" data-p="admin" id="nav-admin">Admin</button>
     </div>
@@ -549,6 +551,27 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <thead><tr><th>Date(s)</th><th>Days</th><th>Reason</th><th>Notes</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="tb-to"><tr><td colspan="6"><div class="empty"><div class="empty-icon">🌴</div><div class="empty-txt">No requests yet</div></div></td></tr></tbody>
         </table></div>
+      </div>
+    </div>
+
+    <!-- SCHEDULE -->
+    <div id="page-schedule" class="page">
+      <div class="ph">
+        <div><div class="ph-title">My Planned Schedule</div><div class="ph-sub">Plan the hours you want to work each day</div></div>
+      </div>
+
+      <div class="card sec">
+        <div class="adm-cal-toolbar">
+          <p class="hint" style="margin:0">Click a day to set your planned shift. Use repeat to apply the same weekday for the whole month.</p>
+          <div class="flex-center gap2">
+            <label class="lbl" style="margin:0">Month</label>
+            <input type="month" id="plan-month" class="inp" style="width:auto" onchange="loadSchedulePlanner()">
+          </div>
+        </div>
+        <div class="adm-cal-head">
+          <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+        </div>
+        <div id="plan-grid" class="adm-cal-grid"></div>
       </div>
     </div>
 
@@ -804,6 +827,43 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
   </div>
 
+  <!-- Planned Schedule Day -->
+  <div class="modal hidden" id="m-plan-day">
+    <button class="m-close" onclick="closeModal()">✕</button>
+    <div class="m-title">🗓️ Planned Shift</div>
+    <input type="hidden" id="plan-day-date">
+    <div class="fld">
+      <label class="lbl">Date</label>
+      <input type="text" id="plan-day-label" class="inp" readonly>
+    </div>
+    <div class="frow">
+      <div class="fld">
+        <label class="lbl">Start</label>
+        <input type="time" id="plan-day-start" class="inp">
+      </div>
+      <div class="fld">
+        <label class="lbl">End</label>
+        <input type="time" id="plan-day-end" class="inp">
+      </div>
+    </div>
+    <div class="fld">
+      <label class="lbl">Notes (optional)</label>
+      <input type="text" id="plan-day-notes" class="inp" placeholder="Ex: Lab shift">
+    </div>
+    <label class="hint" style="display:flex;align-items:center;gap:.4rem;margin-top:.2rem">
+      <input type="checkbox" id="plan-day-repeat">
+      Apply these hours to every same weekday in this month
+    </label>
+    <div id="plan-day-err" class="err-msg" style="margin-top:.75rem"></div>
+    <div class="m-footer" style="justify-content:space-between">
+      <button class="btn btn-danger btn-sm" onclick="deletePlannedShiftDay()">Clear Day</button>
+      <div class="gap2">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="savePlannedShiftDay()">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Profile -->
   <div class="modal hidden" id="m-profile">
     <button class="m-close" onclick="closeModal()">✕</button>
@@ -889,9 +949,10 @@ const S = {
   acoActiveMode: 'none',
   adminTimeOffArchived: false,
   adminCalendarMode: 'timeoff',
+  planByDay: {},
 };
 
-const APP_PAGES = ['dashboard', 'history', 'timeoff', 'admin'];
+const APP_PAGES = ['dashboard', 'history', 'schedule', 'timeoff', 'admin'];
 
 /* ═══════════════════════════════════════════════
    INIT
@@ -1649,6 +1710,143 @@ async function cancelTimeOff(id) {
 }
 
 /* ═══════════════════════════════════════════════
+   SCHEDULE PLANNER
+   ═══════════════════════════════════════════════ */
+async function loadSchedulePlanner() {
+  if (!S.workplace?.id) return;
+  const monthEl = document.getElementById('plan-month');
+  const gridEl = document.getElementById('plan-grid');
+  if (!monthEl || !gridEl) return;
+
+  if (!monthEl.value) {
+    const now = new Date();
+    monthEl.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+
+  const [yr, mo] = monthEl.value.split('-').map(Number);
+  const monthStart = new Date(yr, mo - 1, 1);
+  const monthEnd = new Date(yr, mo, 0);
+  const startKey = localDateKey(monthStart);
+  const endKey = localDateKey(monthEnd);
+
+  const { data: shifts } = await sb.from('planned_shifts')
+    .select('id,shift_date,start_time,end_time,notes')
+    .eq('user_id', S.user.id)
+    .eq('workplace_id', S.workplace.id)
+    .gte('shift_date', startKey)
+    .lte('shift_date', endKey)
+    .order('shift_date', { ascending: true });
+
+  const byDay = {};
+  (shifts || []).forEach(s => { byDay[s.shift_date] = s; });
+  S.planByDay = byDay;
+
+  const firstDow = monthStart.getDay();
+  const daysInMonth = monthEnd.getDate();
+  const cells = [];
+
+  for (let i = 0; i < firstDow; i++) cells.push('<div class="adm-cal-pad"></div>');
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${yr}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const shift = byDay[key];
+    const event = shift
+      ? `<div class="adm-cal-evt plan">${shift.start_time.slice(0,5)}-${shift.end_time.slice(0,5)}</div>${shift.notes ? `<div class="adm-cal-more">${shift.notes}</div>` : ''}`
+      : '<div class="adm-cal-more">No plan</div>';
+    cells.push(`<div class="adm-cal-day" style="cursor:pointer" onclick="openPlannedShiftModal('${key}')"><div class="adm-cal-day-num">${day}</div><div class="adm-cal-events">${event}</div></div>`);
+  }
+
+  gridEl.innerHTML = cells.join('');
+}
+
+function openPlannedShiftModal(dateKey) {
+  const d = new Date(dateKey + 'T12:00');
+  const existing = S.planByDay?.[dateKey] || null;
+  document.getElementById('plan-day-date').value = dateKey;
+  document.getElementById('plan-day-label').value = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  document.getElementById('plan-day-start').value = existing?.start_time?.slice(0,5) || '';
+  document.getElementById('plan-day-end').value = existing?.end_time?.slice(0,5) || '';
+  document.getElementById('plan-day-notes').value = existing?.notes || '';
+  document.getElementById('plan-day-repeat').checked = false;
+  document.getElementById('plan-day-err').classList.remove('on');
+  showOnly('m-plan-day');
+}
+
+async function savePlannedShiftDay() {
+  const errEl = document.getElementById('plan-day-err');
+  errEl.classList.remove('on');
+
+  const dateKey = document.getElementById('plan-day-date').value;
+  const start = document.getElementById('plan-day-start').value;
+  const end = document.getElementById('plan-day-end').value;
+  const notes = document.getElementById('plan-day-notes').value.trim() || null;
+  const repeat = document.getElementById('plan-day-repeat').checked;
+
+  if (!dateKey || !start || !end) {
+    errEl.textContent = 'Please choose both start and end time.';
+    errEl.classList.add('on');
+    return;
+  }
+  if (end <= start) {
+    errEl.textContent = 'End time must be after start time.';
+    errEl.classList.add('on');
+    return;
+  }
+
+  let rows = [{
+    user_id: S.user.id,
+    workplace_id: S.workplace.id,
+    shift_date: dateKey,
+    start_time: start,
+    end_time: end,
+    notes,
+  }];
+
+  if (repeat) {
+    const dt = new Date(dateKey + 'T12:00');
+    const [yr, mo] = [dt.getFullYear(), dt.getMonth()];
+    const weekday = dt.getDay();
+    const first = new Date(yr, mo, 1);
+    const last = new Date(yr, mo + 1, 0);
+    rows = [];
+    for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+      if (d.getDay() !== weekday) continue;
+      rows.push({
+        user_id: S.user.id,
+        workplace_id: S.workplace.id,
+        shift_date: localDateKey(d),
+        start_time: start,
+        end_time: end,
+        notes,
+      });
+    }
+  }
+
+  const { error } = await sb.from('planned_shifts').upsert(rows, { onConflict: 'user_id,shift_date' });
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.classList.add('on');
+    return;
+  }
+
+  closeModal();
+  toast(repeat ? 'Planned shifts saved for this weekday!' : 'Planned shift saved!', 'ok');
+  await loadSchedulePlanner();
+}
+
+async function deletePlannedShiftDay() {
+  const dateKey = document.getElementById('plan-day-date').value;
+  if (!dateKey) return;
+  const { error } = await sb.from('planned_shifts')
+    .delete()
+    .eq('user_id', S.user.id)
+    .eq('shift_date', dateKey);
+  if (error) { toast(error.message, 'er'); return; }
+  closeModal();
+  toast('Planned shift cleared for that day.', 'ok');
+  await loadSchedulePlanner();
+}
+
+/* ═══════════════════════════════════════════════
    ADMIN
    ═══════════════════════════════════════════════ */
 async function loadAdminPage() {
@@ -2394,6 +2592,7 @@ function goto(page, updateHash = true) {
   }
 
   if (page==='history')  loadHistory();
+  if (page==='schedule') loadSchedulePlanner();
   if (page==='timeoff')  loadTimeOffRequests();
   if (page==='admin')    loadAdminPage();
 }
