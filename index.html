@@ -12,6 +12,7 @@
   <style>
 /* ─── VARIABLES ──────────────────────────────────────────── */
 :root {
+  color-scheme: light dark;
   --bg:       #0a0b10;
   --bg2:      #10121a;
   --surface:  #151820;
@@ -33,6 +34,26 @@
   --r:        6px;
   --r-lg:     12px;
   --ease:     150ms ease;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:       #f6f7fb;
+    --bg2:      #ffffff;
+    --surface:  #ffffff;
+    --surface2: #eef1f7;
+    --border:   #d6dbe8;
+    --border2:  #c4cbdd;
+    --amber:    #c77212;
+    --amber-lo: #9a5810;
+    --amber-gl: rgba(199,114,18,.14);
+    --green:    #15803d;
+    --red:      #dc2626;
+    --blue:     #2563eb;
+    --text:     #151a2a;
+    --text2:    #3f4b6a;
+    --muted:    #64708f;
+  }
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
