@@ -292,6 +292,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .adm-cal-day-num{font-family:var(--ff-mono);font-size:.72rem;color:var(--text2)}
 .adm-cal-events{display:flex;flex-direction:column;gap:.25rem;min-width:0}
 .adm-cal-evt{font-size:.68rem;border:1px solid var(--border);border-radius:6px;padding:.18rem .35rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.adm-cal-evt{cursor:pointer}
 .adm-cal-evt.to-approved{color:var(--green);background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.2)}
 .adm-cal-evt.to-denied{color:var(--red);background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.2)}
 .adm-cal-evt.to-pending{color:var(--amber);background:rgba(232,148,42,.08);border-color:rgba(232,148,42,.2)}
@@ -886,6 +887,27 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
   </div>
 
+  <!-- Admin Calendar Event Detail -->
+  <div class="modal hidden" id="m-adm-cal-event">
+    <button class="m-close" onclick="closeModal()">✕</button>
+    <div class="m-title" id="adm-cal-evt-title">Calendar Event</div>
+    <div class="fld" style="margin-bottom:.6rem">
+      <label class="lbl">Date</label>
+      <div id="adm-cal-evt-date" style="color:var(--text2)">—</div>
+    </div>
+    <div class="fld" style="margin-bottom:.6rem">
+      <label class="lbl">Type</label>
+      <div id="adm-cal-evt-type" style="color:var(--text2)">—</div>
+    </div>
+    <div class="fld" style="margin-bottom:0">
+      <label class="lbl">Details</label>
+      <div id="adm-cal-evt-details" style="color:var(--text2);white-space:pre-wrap">—</div>
+    </div>
+    <div class="m-footer">
+      <button class="btn btn-primary" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+
   <!-- Profile -->
   <div class="modal hidden" id="m-profile">
     <button class="m-close" onclick="closeModal()">✕</button>
@@ -978,6 +1000,7 @@ const S = {
   adminTimeOffArchived: false,
   adminCalendarMode: 'timeoff',
   planByDay: {},
+  adminCalendarEvents: {},
 };
 
 const APP_PAGES = ['dashboard', 'history', 'schedule', 'timeoff', 'admin'];
@@ -1961,6 +1984,7 @@ async function loadAdminCalendar() {
 
   const byDay = {};
   const pushDay = (key, evt) => {
+    evt.dayKey = key;
     if (!byDay[key]) byDay[key] = [];
     byDay[key].push(evt);
   };
@@ -1982,6 +2006,8 @@ async function loadAdminCalendar() {
         pushDay(localDateKey(d), {
           cls: `to-${r.status || 'pending'}`,
           text: `${names[r.user_id] || 'Employee'} · ${r.status || 'pending'}`,
+          type: 'Time Off',
+          details: `Employee: ${names[r.user_id] || 'Employee'}\nStatus: ${r.status || 'pending'}`,
         });
       }
     });
@@ -2001,6 +2027,8 @@ async function loadAdminCalendar() {
       pushDay(key, {
         cls: 'work',
         text: `${names[e.user_id] || 'Employee'} · ${fmtTime(ci)}-${co ? fmtTime(co) : '--'}`,
+        type: 'Worked Shift',
+        details: `Employee: ${names[e.user_id] || 'Employee'}\nClock In: ${fmtTime(ci)}\nClock Out: ${co ? fmtTime(co) : '--'}`,
       });
     });
   } else {
@@ -2015,6 +2043,8 @@ async function loadAdminCalendar() {
       pushDay(p.shift_date, {
         cls: 'plan',
         text: `${names[p.user_id] || 'Employee'} · ${String(p.start_time).slice(0,5)}-${String(p.end_time).slice(0,5)}`,
+        type: 'Planned Shift',
+        details: `Employee: ${names[p.user_id] || 'Employee'}\nPlanned: ${String(p.start_time).slice(0,5)}-${String(p.end_time).slice(0,5)}`,
       });
     });
   }
@@ -2022,17 +2052,37 @@ async function loadAdminCalendar() {
   const firstDow = monthStart.getDay();
   const daysInMonth = monthEnd.getDate();
   const cells = [];
+  const eventMap = {};
+  let eventIx = 0;
 
   for (let i = 0; i < firstDow; i++) cells.push('<div class="adm-cal-pad"></div>');
   for (let day = 1; day <= daysInMonth; day++) {
     const key = `${yr}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const events = byDay[key] || [];
-    const show = events.slice(0, 4).map(ev => `<div class="adm-cal-evt ${ev.cls}">${ev.text}</div>`).join('');
+    const show = events.slice(0, 4).map(ev => {
+      const id = `ace-${eventIx++}`;
+      eventMap[id] = ev;
+      return `<div class="adm-cal-evt ${ev.cls}" onclick="openAdminCalendarEvent('${id}')" title="Click for details">${ev.text}</div>`;
+    }).join('');
     const more = events.length > 4 ? `<div class="adm-cal-more">+${events.length - 4} more</div>` : '';
     cells.push(`<div class="adm-cal-day"><div class="adm-cal-day-num">${day}</div><div class="adm-cal-events">${show}${more}</div></div>`);
   }
 
+  S.adminCalendarEvents = eventMap;
   gridEl.innerHTML = cells.join('') || '<div class="empty" style="grid-column:1/-1">No calendar data</div>';
+}
+
+function openAdminCalendarEvent(eventId) {
+  const ev = S.adminCalendarEvents?.[eventId];
+  if (!ev) return;
+  const d = ev.dayKey ? new Date(ev.dayKey + 'T12:00') : null;
+  document.getElementById('adm-cal-evt-title').textContent = ev.text || 'Calendar Event';
+  document.getElementById('adm-cal-evt-date').textContent = d
+    ? d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+    : '—';
+  document.getElementById('adm-cal-evt-type').textContent = ev.type || 'Event';
+  document.getElementById('adm-cal-evt-details').textContent = ev.details || ev.text || '—';
+  showOnly('m-adm-cal-event');
 }
 
 /* ═══════════════════════════════════════════════
