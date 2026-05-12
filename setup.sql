@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS public.workplaces (
   name            text NOT NULL,
   admin_id        uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   hours_per_week  numeric NOT NULL DEFAULT 40,
+  work_address    text,
+  work_lat        double precision,
+  work_lng        double precision,
+  work_radius_m   numeric NOT NULL DEFAULT 150,
   created_at      timestamptz NOT NULL DEFAULT now()
 );
 
@@ -46,6 +50,10 @@ CREATE TABLE IF NOT EXISTS public.time_entries (
   workplace_id      uuid NOT NULL REFERENCES public.workplaces(id) ON DELETE CASCADE,
   clock_in          timestamptz NOT NULL,
   clock_out         timestamptz,
+  clock_in_lat      double precision,
+  clock_in_lng      double precision,
+  clock_in_accuracy_m numeric,
+  clock_in_at_location boolean,
   auto_clockout_at  timestamptz,
   notes             text,
   created_at        timestamptz NOT NULL DEFAULT now()

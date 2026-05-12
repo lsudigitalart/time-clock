@@ -822,7 +822,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Date</th><th>In</th><th>Out</th><th>Duration</th><th>Notes</th><th>Type</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>In</th><th>Out</th><th>Duration</th><th>Notes</th><th>Location</th><th>Type</th><th></th></tr></thead>
         <tbody id="tb-adm-emp-hist"></tbody>
       </table>
     </div>
@@ -920,6 +920,12 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="m-title">🏢 Edit Workplace</div>
     <div class="fld"><label class="lbl">Workplace Name</label>
       <input type="text" id="wp-name-inp" class="inp"></div>
+    <div class="fld"><label class="lbl">Work Address</label>
+      <input type="text" id="wp-address-inp" class="inp" placeholder="123 Main St, Baton Rouge, LA"></div>
+    <div class="fld"><label class="lbl">Clock-In Radius (meters)</label>
+      <input type="number" id="wp-radius-inp" class="inp" min="25" max="2000" step="5" placeholder="150">
+      <p class="hint">When users clock in, we compare their GPS to this address within the radius.</p>
+    </div>
     <div class="m-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveWorkplace()">Save</button>
@@ -1398,12 +1404,28 @@ async function doClockIn() {
     autoAt = tgt.toISOString();
   }
 
+  const geo = await getBrowserLocation();
+  let atLocation = null;
+  if (
+    geo &&
+    typeof S.workplace?.work_lat === 'number' &&
+    typeof S.workplace?.work_lng === 'number'
+  ) {
+    const distM = haversineMeters(geo.lat, geo.lng, S.workplace.work_lat, S.workplace.work_lng);
+    const radiusM = Number(S.workplace.work_radius_m) || 150;
+    atLocation = distM <= radiusM;
+  }
+
   const { data, error } = await sb.from('time_entries').insert({
     user_id: S.user.id,
     workplace_id: S.workplace?.id || null,
     clock_in: new Date().toISOString(),
     auto_clockout_at: autoAt,
     notes: document.getElementById('ci-notes').value.trim() || null,
+    clock_in_lat: geo?.lat ?? null,
+    clock_in_lng: geo?.lng ?? null,
+    clock_in_accuracy_m: geo?.accuracy ?? null,
+    clock_in_at_location: atLocation,
   }).select().single();
 
   if (error) { toast(error.message, 'er'); return; }
@@ -2028,19 +2050,25 @@ async function loadAdminEmpHistory() {
   const tb = document.getElementById('tb-adm-emp-hist');
 
   if (!entries?.length) {
-    tb.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No clock entries this month</div></div></td></tr>';
+    tb.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">No clock entries this month</div></div></td></tr>';
     return;
   }
 
   tb.innerHTML = entries.map(en => {
     const ci = new Date(en.clock_in);
     const co = en.clock_out ? new Date(en.clock_out) : null;
+    const locBadge = en.clock_in_at_location === true
+      ? '<span class="badge bg">On-site</span>'
+      : en.clock_in_at_location === false
+        ? '<span class="badge br">Off-site</span>'
+        : '<span class="badge bm">Unknown</span>';
     return `<tr>
       <td class="td-hi">${ci.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</td>
       <td class="td-mono">${fmtTime(ci)}</td>
       <td class="td-mono">${co ? fmtTime(co) : '—'}</td>
       <td class="td-mono">${co ? fmtDur((co-ci)/3600000) : '—'}</td>
       <td>${en.notes || '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${locBadge}</td>
       <td><span class="badge bb">Clock</span></td>
       <td><button class="btn btn-ghost" style="padding:.2rem .6rem;font-size:.8rem" onclick="openAdminEditEntry('${en.id}')">Edit</button></td>
     </tr>`;
@@ -2387,18 +2415,98 @@ async function syncToSheets(type) {
 
 function openEditWpModal() {
   document.getElementById('wp-name-inp').value = S.workplace?.name || '';
+  document.getElementById('wp-address-inp').value = S.workplace?.work_address || '';
+  document.getElementById('wp-radius-inp').value = Number(S.workplace?.work_radius_m) || 150;
   showOnly('m-wp');
 }
 
 async function saveWorkplace() {
   const name = document.getElementById('wp-name-inp').value.trim();
+  const address = document.getElementById('wp-address-inp').value.trim();
+  const radiusRaw = document.getElementById('wp-radius-inp').value;
+  const radius = Number(radiusRaw || 150);
   if (!name) return;
-  const { error } = await sb.from('workplaces').update({ name }).eq('id', S.workplace.id);
+  if (!Number.isFinite(radius) || radius < 25 || radius > 2000) {
+    toast('Radius must be between 25 and 2000 meters.', 'er');
+    return;
+  }
+
+  let workLat = S.workplace?.work_lat ?? null;
+  let workLng = S.workplace?.work_lng ?? null;
+  const prevAddress = (S.workplace?.work_address || '').trim();
+  const needsGeocode = !!address && (address !== prevAddress || workLat == null || workLng == null);
+  if (!address) {
+    workLat = null;
+    workLng = null;
+  } else if (needsGeocode) {
+    const geo = await geocodeAddress(address);
+    if (geo) {
+      workLat = geo.lat;
+      workLng = geo.lng;
+    } else {
+      workLat = null;
+      workLng = null;
+      toast('Address saved, but geocoding failed. Location checks will show Unknown until geocoding succeeds.', 'inf');
+    }
+  }
+
+  const { error } = await sb.from('workplaces').update({
+    name,
+    work_address: address || null,
+    work_lat: workLat,
+    work_lng: workLng,
+    work_radius_m: radius,
+  }).eq('id', S.workplace.id);
   if (error) { toast(error.message,'er'); return; }
-  S.workplace.name = name;
+  S.workplace = {
+    ...S.workplace,
+    name,
+    work_address: address || null,
+    work_lat: workLat,
+    work_lng: workLng,
+    work_radius_m: radius,
+  };
   document.getElementById('nav-wp-name').textContent = name;
   document.getElementById('adm-wp-lbl').textContent  = name;
   closeModal(); toast('Workplace updated!','ok');
+}
+
+function getBrowserLocation() {
+  return new Promise(resolve => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy,
+      }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 7000, maximumAge: 60000 }
+    );
+  });
+}
+
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const toRad = d => d * (Math.PI / 180);
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function geocodeAddress(address) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || !data[0]) return null;
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch {
+    return null;
+  }
 }
 
 function openProfileModal() {
