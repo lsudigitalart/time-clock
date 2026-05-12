@@ -306,6 +306,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .adm-cal-evt.work{color:var(--blue);background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.2)}
 .adm-cal-evt.plan{color:var(--amber);background:rgba(232,148,42,.08);border-color:rgba(232,148,42,.2)}
 .adm-cal-more{font-size:.66rem;color:var(--muted);font-family:var(--ff-mono)}
+.adm-cal-more.more-link{cursor:pointer;color:var(--amber)}
 
 /* ─── EMPTY STATE ────────────────────────────────────────── */
 .empty{text-align:center;padding:2.5rem;color:var(--muted)}
@@ -1008,6 +1009,7 @@ const S = {
   adminCalendarMode: 'timeoff',
   planByDay: {},
   adminCalendarEvents: {},
+  adminCalendarOverflow: {},
 };
 
 const APP_PAGES = ['dashboard', 'history', 'schedule', 'timeoff', 'admin'];
@@ -2060,6 +2062,7 @@ async function loadAdminCalendar() {
   const daysInMonth = monthEnd.getDate();
   const cells = [];
   const eventMap = {};
+  const overflowMap = {};
   let eventIx = 0;
 
   for (let i = 0; i < firstDow; i++) cells.push('<div class="adm-cal-pad"></div>');
@@ -2071,11 +2074,15 @@ async function loadAdminCalendar() {
       eventMap[id] = ev;
       return `<div class="adm-cal-evt ${ev.cls}" onclick="openAdminCalendarEvent('${id}')" title="Click for details">${ev.text}</div>`;
     }).join('');
-    const more = events.length > 4 ? `<div class="adm-cal-more">+${events.length - 4} more</div>` : '';
+    if (events.length > 4) overflowMap[key] = events.slice(4);
+    const more = events.length > 4
+      ? `<div class="adm-cal-more more-link" onclick="openAdminCalendarMore('${key}')">+${events.length - 4} more</div>`
+      : '';
     cells.push(`<div class="adm-cal-day"><div class="adm-cal-day-num">${day}</div><div class="adm-cal-events">${show}${more}</div></div>`);
   }
 
   S.adminCalendarEvents = eventMap;
+  S.adminCalendarOverflow = overflowMap;
   gridEl.innerHTML = cells.join('') || '<div class="empty" style="grid-column:1/-1">No calendar data</div>';
 }
 
@@ -2089,6 +2096,20 @@ function openAdminCalendarEvent(eventId) {
     : '—';
   document.getElementById('adm-cal-evt-type').textContent = ev.type || 'Event';
   document.getElementById('adm-cal-evt-details').textContent = ev.details || ev.text || '—';
+  showOnly('m-adm-cal-event');
+}
+
+function openAdminCalendarMore(dayKey) {
+  const events = S.adminCalendarOverflow?.[dayKey] || [];
+  if (!events.length) return;
+  const d = new Date(dayKey + 'T12:00');
+  const details = events.map((ev, i) => `${i + 1}. ${ev.details || ev.text || 'Event'}`).join('\n\n');
+  document.getElementById('adm-cal-evt-title').textContent = `More events (${events.length})`;
+  document.getElementById('adm-cal-evt-date').textContent = d.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+  });
+  document.getElementById('adm-cal-evt-type').textContent = 'Calendar Overflow';
+  document.getElementById('adm-cal-evt-details').textContent = details;
   showOnly('m-adm-cal-event');
 }
 
