@@ -693,6 +693,12 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <button class="btn btn-ghost btn-sm" id="adm-cal-worked-btn" onclick="setAdminCalendarMode('worked')">Worked Shifts</button>
             <button class="btn btn-ghost btn-sm" id="adm-cal-planned-btn" onclick="setAdminCalendarMode('planned')">Planned Shifts</button>
           </div>
+          <div class="flex-center gap2" id="adm-cal-worker-filter" style="display:none">
+            <label class="lbl" style="margin:0">Worker</label>
+            <select id="adm-cal-worker" class="inp" style="width:auto" onchange="loadAdminCalendar()">
+              <option value="">All</option>
+            </select>
+          </div>
           <div class="flex-center gap2">
             <label class="lbl" style="margin:0">Month</label>
             <input type="month" id="adm-cal-month" class="inp" style="width:auto" onchange="loadAdminCalendar()">
@@ -1007,6 +1013,7 @@ const S = {
   acoActiveMode: 'none',
   adminTimeOffArchived: false,
   adminCalendarMode: 'timeoff',
+  adminCalendarWorker: '',
   planByDay: {},
   adminCalendarEvents: {},
   adminCalendarOverflow: {},
@@ -1956,6 +1963,11 @@ function setAdminCalendarMode(mode) {
   document.getElementById('adm-cal-timeoff-btn')?.classList.toggle('on', S.adminCalendarMode === 'timeoff');
   document.getElementById('adm-cal-worked-btn')?.classList.toggle('on', S.adminCalendarMode === 'worked');
   document.getElementById('adm-cal-planned-btn')?.classList.toggle('on', S.adminCalendarMode === 'planned');
+  const workerFilterEl = document.getElementById('adm-cal-worker-filter');
+  if (workerFilterEl) workerFilterEl.style.display = S.adminCalendarMode === 'planned' ? 'flex' : 'none';
+  S.adminCalendarWorker = '';
+  const workerSel = document.getElementById('adm-cal-worker');
+  if (workerSel) workerSel.value = '';
   loadAdminCalendar();
 }
 
@@ -1989,7 +2001,25 @@ async function loadAdminCalendar() {
     .select('user_id, profile:profiles(full_name)')
     .eq('workplace_id', S.workplace.id);
   const names = {};
-  (members || []).forEach(m => { names[m.user_id] = m.profile?.full_name || 'Employee'; });
+  const userIds = [];
+  (members || []).forEach(m => { 
+    names[m.user_id] = m.profile?.full_name || 'Employee';
+    userIds.push(m.user_id);
+  });
+  if (S.adminCalendarMode === 'planned') {
+    const workerSel = document.getElementById('adm-cal-worker');
+    if (workerSel) {
+      const currentVal = workerSel.value;
+      workerSel.innerHTML = '<option value="">All</option>';
+      userIds.forEach(uid => {
+        const opt = document.createElement('option');
+        opt.value = uid;
+        opt.textContent = names[uid];
+        workerSel.appendChild(opt);
+      });
+      workerSel.value = currentVal;
+    }
+  }
 
   const byDay = {};
   const pushDay = (key, evt) => {
@@ -2041,12 +2071,15 @@ async function loadAdminCalendar() {
       });
     });
   } else {
-    const { data: plans } = await sb.from('planned_shifts')
+    let query = sb.from('planned_shifts')
       .select('user_id,shift_date,start_time,end_time')
       .eq('workplace_id', S.workplace.id)
       .gte('shift_date', startKey)
-      .lte('shift_date', endKey)
-      .order('shift_date', { ascending: true });
+      .lte('shift_date', endKey);
+    if (S.adminCalendarWorker) {
+      query = query.eq('user_id', S.adminCalendarWorker);
+    }
+    const { data: plans } = await query.order('shift_date', { ascending: true });
 
     (plans || []).forEach(p => {
       pushDay(p.shift_date, {
@@ -2111,6 +2144,11 @@ function openAdminCalendarMore(dayKey) {
   document.getElementById('adm-cal-evt-type').textContent = 'Calendar Overflow';
   document.getElementById('adm-cal-evt-details').textContent = details;
   showOnly('m-adm-cal-event');
+}
+
+function setAdminCalendarWorker(userId) {
+  S.adminCalendarWorker = userId;
+  loadAdminCalendar();
 }
 
 /* ═══════════════════════════════════════════════
