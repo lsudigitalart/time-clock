@@ -693,9 +693,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <button class="btn btn-ghost btn-sm" id="adm-cal-worked-btn" onclick="setAdminCalendarMode('worked')">Worked Shifts</button>
             <button class="btn btn-ghost btn-sm" id="adm-cal-planned-btn" onclick="setAdminCalendarMode('planned')">Planned Shifts</button>
           </div>
-          <div class="flex-center gap2" id="adm-cal-worker-filter" style="display:none">
+          <div class="flex-center gap2" id="adm-cal-worker-filter">
             <label class="lbl" style="margin:0">Worker</label>
-            <select id="adm-cal-worker" class="inp" style="width:auto" onchange="loadAdminCalendar()">
+            <select id="adm-cal-worker" class="inp" style="width:auto" onchange="setAdminCalendarWorker(this.value)">
               <option value="">All</option>
             </select>
           </div>
@@ -1963,11 +1963,6 @@ function setAdminCalendarMode(mode) {
   document.getElementById('adm-cal-timeoff-btn')?.classList.toggle('on', S.adminCalendarMode === 'timeoff');
   document.getElementById('adm-cal-worked-btn')?.classList.toggle('on', S.adminCalendarMode === 'worked');
   document.getElementById('adm-cal-planned-btn')?.classList.toggle('on', S.adminCalendarMode === 'planned');
-  const workerFilterEl = document.getElementById('adm-cal-worker-filter');
-  if (workerFilterEl) workerFilterEl.style.display = S.adminCalendarMode === 'planned' ? 'flex' : 'none';
-  S.adminCalendarWorker = '';
-  const workerSel = document.getElementById('adm-cal-worker');
-  if (workerSel) workerSel.value = '';
   loadAdminCalendar();
 }
 
@@ -2006,19 +2001,19 @@ async function loadAdminCalendar() {
     names[m.user_id] = m.profile?.full_name || 'Employee';
     userIds.push(m.user_id);
   });
-  if (S.adminCalendarMode === 'planned') {
-    const workerSel = document.getElementById('adm-cal-worker');
-    if (workerSel) {
-      const currentVal = workerSel.value;
-      workerSel.innerHTML = '<option value="">All</option>';
-      userIds.forEach(uid => {
-        const opt = document.createElement('option');
-        opt.value = uid;
-        opt.textContent = names[uid];
-        workerSel.appendChild(opt);
-      });
-      workerSel.value = currentVal;
+  const workerSel = document.getElementById('adm-cal-worker');
+  if (workerSel) {
+    workerSel.innerHTML = '<option value="">All</option>';
+    userIds.forEach(uid => {
+      const opt = document.createElement('option');
+      opt.value = uid;
+      opt.textContent = names[uid];
+      workerSel.appendChild(opt);
+    });
+    if (S.adminCalendarWorker && !userIds.includes(S.adminCalendarWorker)) {
+      S.adminCalendarWorker = '';
     }
+    workerSel.value = S.adminCalendarWorker || '';
   }
 
   const byDay = {};
@@ -2029,12 +2024,13 @@ async function loadAdminCalendar() {
   };
 
   if (S.adminCalendarMode === 'timeoff') {
-    const { data: requests } = await sb.from('time_off_requests')
+    let query = sb.from('time_off_requests')
       .select('user_id,start_date,end_date,status')
       .eq('workplace_id', S.workplace.id)
       .lte('start_date', endKey)
-      .gte('end_date', startKey)
-      .order('start_date', { ascending: true });
+      .gte('end_date', startKey);
+    if (S.adminCalendarWorker) query = query.eq('user_id', S.adminCalendarWorker);
+    const { data: requests } = await query.order('start_date', { ascending: true });
 
     (requests || []).forEach(r => {
       const rs = new Date((r.start_date || startKey) + 'T12:00');
@@ -2051,13 +2047,14 @@ async function loadAdminCalendar() {
       }
     });
   } else if (S.adminCalendarMode === 'worked') {
-    const { data: entries } = await sb.from('time_entries')
+    let query = sb.from('time_entries')
       .select('user_id,clock_in,clock_out')
       .eq('workplace_id', S.workplace.id)
       .gte('clock_in', monthStart.toISOString())
       .lt('clock_in', monthEndExclusive.toISOString())
-      .not('clock_out', 'is', null)
-      .order('clock_in', { ascending: true });
+      .not('clock_out', 'is', null);
+    if (S.adminCalendarWorker) query = query.eq('user_id', S.adminCalendarWorker);
+    const { data: entries } = await query.order('clock_in', { ascending: true });
 
     (entries || []).forEach(e => {
       const ci = new Date(e.clock_in);
