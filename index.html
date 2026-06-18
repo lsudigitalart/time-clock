@@ -506,11 +506,37 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <div class="clock-sub">TIME TODAY</div>
           <div class="clock-since" id="cl-since"></div>
           <div class="clock-btns">
-            <button class="btn btn-primary btn-lg" id="btn-in"  onclick="openClockInModal()">Start Shift</button>
+            <button class="btn btn-primary btn-lg" id="btn-in"  onclick="startShiftImmediately()">Start Shift</button>
             <button class="btn btn-secondary btn-lg hidden" id="btn-out" onclick="doClockOut()">End Shift</button>
           </div>
           <div class="aco-strip" id="aco-strip">
             Reminder to wrap up at <span id="aco-disp" style="color:var(--amber)"></span>
+          </div>
+          <div id="shift-details-inline" class="hidden" style="margin-top:1.5rem;padding:1rem;background:var(--bg-elevated);border-radius:6px;border:1px solid var(--border)">
+            <div class="card-title" style="margin-bottom:1rem;font-size:.9rem">Shift Details</div>
+            <div class="fld mb1">
+              <label class="lbl">Notes (optional)</label>
+              <input type="text" id="shift-notes-inline" class="inp" placeholder="What are you working on?">
+            </div>
+            <div class="fld mb1">
+              <label class="lbl">Projects (optional)</label>
+              <select id="shift-projects-inline" class="inp" multiple size="3"></select>
+              <p class="hint">Hold Command to select multiple projects</p>
+            </div>
+            <div class="fld mb1">
+              <label class="lbl">Auto End Time (optional)</label>
+              <div class="aco-tabs" style="gap:.5rem">
+                <button type="button" class="aco-tab on" onclick="acoModeInline('none',this)" style="font-size:.8rem;padding:.4rem .6rem">None</button>
+                <button type="button" class="aco-tab" onclick="acoModeInline('hours',this)" style="font-size:.8rem;padding:.4rem .6rem">After Hours</button>
+                <button type="button" class="aco-tab" onclick="acoModeInline('time',this)" style="font-size:.8rem;padding:.4rem .6rem">At Time</button>
+              </div>
+              <div class="aco-panel on" id="acp-none-inline" style="margin-top:.5rem"><p class="hint">End manually when ready</p></div>
+              <div class="aco-panel" id="acp-hours-inline" style="margin-top:.5rem"><input type="number" id="aco-h-inline" class="inp" placeholder="8" min=".5" max="24" step=".5"><p class="hint">Hours until auto-end</p></div>
+              <div class="aco-panel" id="acp-time-inline" style="margin-top:.5rem"><input type="time" id="aco-t-inline" class="inp"><p class="hint">Time to auto-end</p></div>
+            </div>
+            <div style="display:flex;gap:.5rem">
+              <button class="btn btn-primary btn-sm" onclick="saveShiftDetails()">Save Details</button>
+            </div>
           </div>
         </div>
 
@@ -1549,6 +1575,7 @@ function setClockOutUI() {
   document.getElementById('cl-digits').textContent = '00:00:00';
   document.getElementById('cl-since').textContent = '';
   document.getElementById('aco-strip').classList.remove('on');
+  document.getElementById('shift-details-inline').classList.add('hidden');
   clearInterval(S.clockTick); clearTimeout(S.acoTimer);
 }
 
@@ -1563,6 +1590,114 @@ function openClockInModal() {
   const hoursTab = document.querySelectorAll('.aco-tab')[1];
   acoMode('hours', hoursTab);
   openModal('m-clockin');
+}
+
+async function startShiftImmediately() {
+  if (!S.workplace?.id) {
+    await loadWorkplace();
+    if (!S.workplace?.id) {
+      toast('No workplace assigned. Ask your admin to add you, then sign out/in.', 'er');
+      return;
+    }
+  }
+
+  const geo = await getBrowserLocation();
+  let atLocation = null;
+  if (
+    geo &&
+    typeof S.workplace?.work_lat === 'number' &&
+    typeof S.workplace?.work_lng === 'number'
+  ) {
+    const distM = haversineMeters(geo.lat, geo.lng, S.workplace.work_lat, S.workplace.work_lng);
+    const radiusM = Number(S.workplace.work_radius_m) || 150;
+    atLocation = distM <= radiusM;
+  }
+
+  const { data, error } = await sb.from('time_entries').insert({
+    user_id: S.user.id,
+    workplace_id: S.workplace?.id || null,
+    clock_in: new Date().toISOString(),
+    auto_clockout_at: null,
+    notes: null,
+    project_names: [],
+    clock_in_lat: geo?.lat ?? null,
+    clock_in_lng: geo?.lng ?? null,
+    clock_in_accuracy_m: geo?.accuracy ?? null,
+    clock_in_at_location: atLocation,
+  }).select().single();
+
+  if (error) { toast(error.message, 'er'); return; }
+  S.entry = data;
+  setClockInUI(data);
+  toast('Shift started!', 'ok');
+  loadWeekProgress();
+  showShiftDetailsInline();
+}
+
+async function showShiftDetailsInline() {
+  await loadWorkplaceProjects();
+  renderProjectSelect('shift-projects-inline', S.entry?.project_names || []);
+  document.getElementById('shift-notes-inline').value = S.entry?.notes || '';
+  document.getElementById('shift-details-inline').classList.remove('hidden');
+  acoModeInline('none', document.querySelectorAll('#shift-details-inline .aco-tab')[0]);
+}
+
+function acoModeInline(mode, btn) {
+  S.acoInlineMode = mode;
+  document.querySelectorAll('#shift-details-inline .aco-tab').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  ['none','hours','time'].forEach(m => {
+    document.getElementById('acp-' + m + '-inline').classList.toggle('on', m === mode);
+  });
+}
+
+async function saveShiftDetails() {
+  if (!S.entry) return;
+  
+  const notes = document.getElementById('shift-notes-inline').value.trim() || null;
+  const projects = getSelectedProjectNames('shift-projects-inline');
+  
+  let autoAt = null;
+  if (S.acoInlineMode === 'hours') {
+    const h = parseFloat(document.getElementById('aco-h-inline').value);
+    if (!h || h <= 0) { toast('Enter valid hours', 'er'); return; }
+    autoAt = new Date(Date.now() + h * 3600000).toISOString();
+  } else if (S.acoInlineMode === 'time') {
+    const t = document.getElementById('aco-t-inline').value;
+    if (!t) { toast('Enter a time', 'er'); return; }
+    const [hh, mm] = t.split(':').map(Number);
+    const now = new Date();
+    let tgt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0);
+    if (tgt <= now) tgt.setDate(tgt.getDate() + 1);
+    autoAt = tgt.toISOString();
+  }
+
+  const { error } = await sb.from('time_entries')
+    .update({ notes, project_names: projects, auto_clockout_at: autoAt })
+    .eq('id', S.entry.id);
+
+  if (error) { toast(error.message, 'er'); return; }
+  S.entry = { ...S.entry, notes, project_names: projects, auto_clockout_at: autoAt };
+  
+  if (autoAt) {
+    const autoAtDate = new Date(autoAt);
+    const ms = autoAtDate.getTime() - Date.now();
+    document.getElementById('aco-strip').classList.add('on');
+    document.getElementById('aco-disp').textContent = fmtTime(autoAtDate);
+    clearTimeout(S.acoTimer);
+    if (ms <= 0) {
+      performClockOut(); return;
+    }
+    S.acoTimer = setTimeout(async () => {
+      await performClockOut();
+      toast('Your shift has wrapped up automatically!', 'inf');
+    }, ms);
+  } else {
+    document.getElementById('aco-strip').classList.remove('on');
+    clearTimeout(S.acoTimer);
+  }
+  
+  toast('Shift details saved!', 'ok');
 }
 
 function acoMode(mode, btn) {
