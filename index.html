@@ -711,22 +711,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <button class="btn btn-ghost btn-sm" onclick="loadAdminPage()">↺ Refresh</button>
           </div>
         </div>
-          <div class="flex-center jb" style="gap:.8rem;flex-wrap:wrap;margin:-.35rem 0 1rem">
-            <div class="flex-center gap2" style="flex-wrap:wrap">
-              <label class="hint" style="display:flex;align-items:center;gap:.45rem;margin:0">
-                <input type="checkbox" id="adm-emp-select-all" onchange="toggleAdminEmployeeSelectionAll(this.checked)">
-                Select visible
-              </label>
-              <span class="hint"><span id="adm-emp-sel-cnt">0</span> selected</span>
-            </div>
-            <div class="flex-center gap2" style="flex-wrap:wrap">
-              <input type="text" id="adm-emp-bulk-group" class="inp" style="width:220px" placeholder="Type new or existing group" list="adm-emp-groups">
-              <datalist id="adm-emp-groups"></datalist>
-              <button class="btn btn-ghost btn-sm" id="adm-emp-apply-group" onclick="applyAdminEmployeeGroup()" disabled>Create / Apply Group</button>
-              <button class="btn btn-ghost btn-sm" id="adm-emp-clear-group" onclick="clearAdminEmployeeGroup()" disabled>Clear Group</button>
-            </div>
-          </div>
-          <p class="hint" style="margin:-.45rem 0 1rem">Type a new group name here to create it, or pick an existing one, then apply it to the selected employees.</p>
         <div class="tbl-wrap">
           <table id="adm-emp-list">
             <thead>
@@ -2801,7 +2785,9 @@ async function loadAdminEmployees() {
     </td>
     <td style="font-weight:500">${e.name}</td>
     <td>${e.role==='admin'?'👑 Admin':'👤 Employee'}</td>
-    <td>${e.group ? `<span style="font-size:.85rem;color:var(--text);padding:.25rem .5rem;background:var(--bg-elevated);border-radius:3px">📁 ${escHtml(e.group)}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+    <td onclick="event.stopPropagation()" style="padding:0;cursor:text">
+      <div class="group-edit" data-member-id="${JSON.stringify(e.memberId)}" contenteditable="true" style="padding:.25rem .5rem;min-height:1.4em;border-radius:3px;background:var(--bg-elevated);word-break:break-word" onblur="saveAdminEmployeeGroup(this)" onkeydown="handleGroupKeydown(event, this)" title="Click to edit or delete">${e.group ? escHtml(e.group) : ''}</div>
+    </td>
     <td style="text-align:center">${e.onLeave ? '<span style="color:#f59e0b;font-weight:500">✈️ On Leave</span>' : '<span style="color:var(--muted)">—</span>'}</td>
     <td style="text-align:right">${e.wh.toFixed(1)}h <span style="color:var(--muted);font-size:.8rem">/ ${e.target}</span></td>
     <td style="text-align:center"><div class="prog-wrap" style="margin:0;height:4px;width:100px"><div class="prog-bar" style="width:${e.pct}%"></div></div><div style="font-size:.75rem;color:var(--muted);margin-top:.2rem">${e.pct.toFixed(0)}%</div></td>
@@ -2914,22 +2900,7 @@ function closeLeaveFilter() {
 }
 
 function syncAdminEmployeeSelectionUi() {
-  const selected = S.adminEmployeeSelection || [];
-  const visible = S.adminEmployeeVisibleIds || [];
-  const visibleSelected = visible.filter(id => selected.includes(id)).length;
-  const countEl = document.getElementById('adm-emp-sel-cnt');
-  if (countEl) countEl.textContent = selected.length;
-
-  const selectAll = document.getElementById('adm-emp-select-all');
-  if (selectAll) {
-    selectAll.checked = visible.length > 0 && visibleSelected === visible.length;
-    selectAll.indeterminate = visibleSelected > 0 && visibleSelected < visible.length;
-  }
-
-  ['adm-emp-apply-group', 'adm-emp-clear-group'].forEach(id => {
-    const btn = document.getElementById(id);
-    if (btn) btn.disabled = selected.length === 0;
-  });
+  // Just update the selection count if needed, but no longer manage bulk group buttons
 }
 
 function toggleAdminEmployeeSelection(memberId, checked) {
@@ -2951,38 +2922,33 @@ function toggleAdminEmployeeSelectionAll(checked) {
   syncAdminEmployeeSelectionUi();
 }
 
-async function applyAdminEmployeeGroup(clearGroup = false) {
-  const selected = S.adminEmployeeSelection || [];
-  if (!selected.length) { toast('Select employees first.', 'er'); return; }
+async function saveAdminEmployeeGroup(el) {
+  const memberId = el.getAttribute('data-member-id');
+  if (!memberId) return;
 
-  const input = document.getElementById('adm-emp-bulk-group');
-  const nextGroup = clearGroup ? null : (input?.value || '').trim();
-  if (!clearGroup && !nextGroup) { toast('Type a new or existing group name first.', 'er'); return; }
-
-  const applyBtn = document.getElementById('adm-emp-apply-group');
-  const clearBtn = document.getElementById('adm-emp-clear-group');
-  if (applyBtn) applyBtn.disabled = true;
-  if (clearBtn) clearBtn.disabled = true;
+  const newGroup = (el.textContent || '').trim() || null;
+  const memberId_parsed = JSON.parse(memberId);
 
   const { error } = await sb.from('workplace_members')
-    .update({ group: nextGroup })
-    .in('id', selected)
+    .update({ group: newGroup })
+    .eq('id', memberId_parsed)
     .eq('workplace_id', S.workplace.id);
 
   if (error) {
-    syncAdminEmployeeSelectionUi();
-    toast(error.message || 'Bulk update failed.', 'er');
+    toast(error.message || 'Failed to update group.', 'er');
+    await loadAdminEmployees();
     return;
   }
 
-  S.adminEmployeeSelection = [];
-  if (input && clearGroup) input.value = '';
-  toast(clearGroup ? 'Group cleared for selected employees.' : `Group ${nextGroup} applied to ${selected.length} employee${selected.length === 1 ? '' : 's'}.`, 'ok');
+  toast(newGroup ? `Group set to "${newGroup}".` : 'Group cleared.', 'ok');
   await loadAdminEmployees();
 }
 
-function clearAdminEmployeeGroup() {
-  return applyAdminEmployeeGroup(true);
+function handleGroupKeydown(e, el) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    el.blur();
+  }
 }
 
 async function loadAdminStats() {
