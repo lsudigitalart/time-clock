@@ -1620,7 +1620,11 @@ async function showShiftDetailsInline() {
   renderProjectSelect('shift-projects-inline', S.entry?.project_names || []);
   document.getElementById('shift-notes-inline').value = S.entry?.notes || '';
   document.getElementById('shift-details-inline').classList.remove('hidden');
-  acoModeInline('none', document.querySelectorAll('#shift-details-inline .aco-tab')[0]);
+  // Default to "After Hours" with 8 hours pre-filled
+  const hoursBtn = document.querySelectorAll('#shift-details-inline .aco-tab')[1];
+  acoModeInline('hours', hoursBtn);
+  const hoursInput = document.getElementById('aco-h-inline');
+  if (hoursInput && !hoursInput.value) hoursInput.value = '8';
 }
 
 function acoModeInline(mode, btn) {
