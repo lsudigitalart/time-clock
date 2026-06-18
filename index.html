@@ -680,7 +680,10 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <div class="card sec">
         <div class="card-title flex-center jb" style="margin-bottom:1rem">
           <div class="flex-center gap2"><div class="card-dot"></div> Employees</div>
-          <button class="btn btn-ghost btn-sm" onclick="loadAdminPage()">↺ Refresh</button>
+          <div class="flex-center gap2">
+            <button class="btn btn-primary btn-sm" onclick="openAddEmployeeModal()">+ Add Employee</button>
+            <button class="btn btn-ghost btn-sm" onclick="loadAdminPage()">↺ Refresh</button>
+          </div>
         </div>
         <div id="adm-emp-list"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet</div></div></div>
       </div>
@@ -919,6 +922,29 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
     <div class="m-footer">
       <button class="btn btn-primary" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- Add Employee (Admin) -->
+  <div class="modal hidden" id="m-add-employee">
+    <button class="m-close" onclick="closeModal()">✕</button>
+    <div class="m-title">➕ Add Employee</div>
+    <div class="fld"><label class="lbl">Full Name</label>
+      <input type="text" id="ae-name" class="inp" placeholder="Jane Smith"></div>
+    <div class="fld"><label class="lbl">Email</label>
+      <input type="email" id="ae-email" class="inp" placeholder="jane@example.com"></div>
+    <div class="fld"><label class="lbl">Temporary Password</label>
+      <input type="text" id="ae-pass" class="inp" placeholder="They can change this after signing in">
+      <p class="hint">Share this with the employee so they can sign in for the first time.</p></div>
+    <div class="fld"><label class="lbl">Role</label>
+      <select id="ae-role" class="inp">
+        <option value="member">👤 Employee</option>
+        <option value="admin">👑 Admin</option>
+      </select></div>
+    <div id="ae-err" class="err-msg"></div>
+    <div class="m-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="ae-btn" onclick="submitAddEmployee()">Add Employee</button>
     </div>
   </div>
 
@@ -2749,6 +2775,56 @@ async function adminDeleteEmployee(userId, name) {
   const data = await res.json();
   if (!res.ok) { toast(data.error || 'Delete failed', 'er'); return; }
   toast(`${name}'s account deleted.`, 'ok');
+  await loadAdminEmployees();
+}
+
+function openAddEmployeeModal() {
+  document.getElementById('ae-name').value = '';
+  document.getElementById('ae-email').value = '';
+  document.getElementById('ae-pass').value = '';
+  document.getElementById('ae-role').value = 'member';
+  document.getElementById('ae-err').classList.remove('on');
+  const btn = document.getElementById('ae-btn');
+  btn.disabled = false; btn.textContent = 'Add Employee';
+  showOnly('m-add-employee');
+}
+
+async function submitAddEmployee() {
+  const errEl = document.getElementById('ae-err');
+  const btn   = document.getElementById('ae-btn');
+  errEl.classList.remove('on');
+
+  const full_name    = document.getElementById('ae-name').value.trim();
+  const email        = document.getElementById('ae-email').value.trim();
+  const temp_password = document.getElementById('ae-pass').value;
+  const role         = document.getElementById('ae-role').value;
+
+  if (!full_name) { errEl.textContent = 'Please enter a name.'; errEl.classList.add('on'); return; }
+  if (!email)     { errEl.textContent = 'Please enter an email.'; errEl.classList.add('on'); return; }
+  if (!temp_password || temp_password.length < 6) {
+    errEl.textContent = 'Temporary password must be at least 6 characters.';
+    errEl.classList.add('on'); return;
+  }
+
+  btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Adding…';
+
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(`${SB_URL}/functions/v1/add-employee`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+    body: JSON.stringify({ full_name, email, temp_password, role }),
+  });
+  const data = await res.json();
+
+  if (!res.ok) {
+    errEl.textContent = data.error || 'Failed to add employee.';
+    errEl.classList.add('on');
+    btn.disabled = false; btn.textContent = 'Add Employee';
+    return;
+  }
+
+  closeModal();
+  toast(`${full_name} added successfully!`, 'ok');
   await loadAdminEmployees();
 }
 
