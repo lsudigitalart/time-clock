@@ -512,32 +512,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <div class="aco-strip" id="aco-strip">
             Reminder to wrap up at <span id="aco-disp" style="color:var(--amber)"></span>
           </div>
-          <div id="shift-details-inline" class="hidden" style="margin-top:1.5rem;padding:1rem;background:var(--bg-elevated);border-radius:6px;border:1px solid var(--border)">
-            <div class="card-title" style="margin-bottom:1rem;font-size:.9rem">Shift Details</div>
-            <div class="fld mb1">
-              <label class="lbl">Notes (optional)</label>
-              <input type="text" id="shift-notes-inline" class="inp" placeholder="What are you working on?">
-            </div>
-            <div class="fld mb1">
-              <label class="lbl">Projects (optional)</label>
-              <select id="shift-projects-inline" class="inp" multiple size="3"></select>
-              <p class="hint">Hold Command to select multiple projects</p>
-            </div>
-            <div class="fld mb1">
-              <label class="lbl">Auto End Time (optional)</label>
-              <div class="aco-tabs" style="gap:.5rem">
-                <button type="button" class="aco-tab on" onclick="acoModeInline('none',this)" style="font-size:.8rem;padding:.4rem .6rem">None</button>
-                <button type="button" class="aco-tab" onclick="acoModeInline('hours',this)" style="font-size:.8rem;padding:.4rem .6rem">After Hours</button>
-                <button type="button" class="aco-tab" onclick="acoModeInline('time',this)" style="font-size:.8rem;padding:.4rem .6rem">At Time</button>
-              </div>
-              <div class="aco-panel on" id="acp-none-inline" style="margin-top:.5rem"><p class="hint">End manually when ready</p></div>
-              <div class="aco-panel" id="acp-hours-inline" style="margin-top:.5rem"><input type="number" id="aco-h-inline" class="inp" placeholder="8" min=".5" max="24" step=".5"><p class="hint">Hours until auto-end</p></div>
-              <div class="aco-panel" id="acp-time-inline" style="margin-top:.5rem"><input type="time" id="aco-t-inline" class="inp"><p class="hint">Time to auto-end</p></div>
-            </div>
-            <div style="display:flex;gap:.5rem">
-              <button class="btn btn-primary btn-sm" onclick="saveShiftDetails()">Save Details</button>
-            </div>
-          </div>
         </div>
 
         <!-- Week Progress -->
@@ -569,6 +543,33 @@ tr:hover td{background:rgba(255,255,255,.015)}
               <div class="stat-sub">hours worked</div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div id="shift-details-inline" class="card sec hidden">
+        <div class="card-title" style="margin-bottom:1rem">Shift Details</div>
+        <div class="fld mb1">
+          <label class="lbl">Notes (optional)</label>
+          <input type="text" id="shift-notes-inline" class="inp" placeholder="What are you working on?">
+        </div>
+        <div class="fld mb1">
+          <label class="lbl">Projects (optional)</label>
+          <select id="shift-projects-inline" class="inp" multiple size="3"></select>
+          <p class="hint">Hold Command to select multiple projects</p>
+        </div>
+        <div class="fld mb1">
+          <label class="lbl">Auto End Time (optional)</label>
+          <div class="aco-tabs" style="gap:.5rem">
+            <button type="button" class="aco-tab on" onclick="acoModeInline('none',this)" style="font-size:.8rem;padding:.4rem .6rem">None</button>
+            <button type="button" class="aco-tab" onclick="acoModeInline('hours',this)" style="font-size:.8rem;padding:.4rem .6rem">After Hours</button>
+            <button type="button" class="aco-tab" onclick="acoModeInline('time',this)" style="font-size:.8rem;padding:.4rem .6rem">At Time</button>
+          </div>
+          <div class="aco-panel on" id="acp-none-inline" style="margin-top:.5rem"><p class="hint">End manually when ready</p></div>
+          <div class="aco-panel" id="acp-hours-inline" style="margin-top:.5rem"><input type="number" id="aco-h-inline" class="inp" placeholder="8" min=".5" max="24" step=".5"><p class="hint">Hours until auto-end</p></div>
+          <div class="aco-panel" id="acp-time-inline" style="margin-top:.5rem"><input type="time" id="aco-t-inline" class="inp"><p class="hint">Time to auto-end</p></div>
+        </div>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn btn-primary btn-sm" onclick="saveShiftDetails()">Save Details</button>
         </div>
       </div>
 
