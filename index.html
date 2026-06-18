@@ -2851,8 +2851,8 @@ async function loadAdminEmployees() {
     </td>
     <td style="font-weight:500">${e.name}</td>
     <td>${e.role==='admin'?'👑 Admin':'👤 Employee'}</td>
-    <td onclick="event.stopPropagation()" style="padding:0;cursor:text">
-      <div class="group-edit" data-member-id="${e.memberId}" contenteditable="true" style="padding:.25rem .5rem;min-height:1.4em;border-radius:3px;background:var(--bg-elevated);word-break:break-word" onblur="saveAdminEmployeeGroup(this)" onkeydown="handleGroupKeydown(event, this)" title="Click to edit or delete">${e.group ? escHtml(e.group) : ''}</div>
+    <td onclick="event.stopPropagation()" style="padding:.3rem .5rem">
+      <input class="group-edit inp" data-member-id="${e.memberId}" list="adm-emp-groups" value="${e.group ? escHtml(e.group) : ''}" placeholder="—" style="width:100%;font-size:.8rem;padding:.2rem .4rem" onblur="saveAdminEmployeeGroup(this)" onkeydown="handleGroupKeydown(event, this)">
     </td>
     <td style="text-align:center">${
       e.onLeave
@@ -3000,7 +3000,7 @@ async function saveAdminEmployeeGroup(el) {
   const memberId = el.getAttribute('data-member-id');
   if (!memberId) return;
 
-  const newGroup = (el.textContent || '').trim() || null;
+  const newGroup = (el.value || '').trim() || null;
   const selected = S.adminEmployeeSelection || [];
   const applyToSelected = selected.length > 0 && selected.includes(memberId);
   const targetIds = applyToSelected ? selected : [memberId];
