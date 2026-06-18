@@ -707,15 +707,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <div class="card-title flex-center jb" style="margin-bottom:1rem">
           <div class="flex-center gap2"><div class="card-dot"></div> Employees</div>
           <div class="flex-center gap2">
-            <select id="adm-emp-group" class="inp" style="width:auto;height:auto;padding:.35rem .5rem;font-size:.78rem" onchange="loadAdminEmployees()">
-              <option value="">Show All Groups</option>
-            </select>
-            <select id="adm-emp-sort" class="inp" style="width:auto;height:auto;padding:.35rem .5rem;font-size:.78rem" onchange="loadAdminEmployees()">
-              <option value="name-asc">Sort: First Name (A-Z)</option>
-              <option value="lastname-asc">Sort: Last Name (A-Z)</option>
-              <option value="hours-desc">Sort: Hours (High→Low)</option>
-              <option value="hours-asc">Sort: Hours (Low→High)</option>
-            </select>
             <button class="btn btn-primary btn-sm" onclick="openAddEmployeeModal()">+ Add Employee</button>
             <button class="btn btn-ghost btn-sm" onclick="loadAdminPage()">↺ Refresh</button>
           </div>
@@ -741,11 +732,11 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <thead>
               <tr>
                 <th style="width:32px"></th>
-                <th>Name</th>
-                <th>Role</th>
-                <th>Group</th>
-                <th style="text-align:center">Leave</th>
-                <th style="text-align:right">Hours</th>
+                <th style="cursor:pointer;user-select:none" onclick="toggleAdminEmpSort('name')">Name <span id="adm-sort-name"></span></th>
+                <th style="cursor:pointer;user-select:none" onclick="toggleAdminEmpSort('role')">Role <span id="adm-sort-role"></span></th>
+                <th style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:.3rem" onclick="toggleAdminEmpSort('group')">Group <span id="adm-sort-group"></span> <button class="btn btn-ghost" style="padding:0;width:24px;height:24px;font-size:1.1rem" onclick="event.stopPropagation(); openGroupFilter()" title="Filter by group">🔍</button></th>
+                <th style="text-align:center;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:center;gap:.3rem" onclick="toggleAdminEmpSort('leave')">Leave <span id="adm-sort-leave"></span> <button class="btn btn-ghost" style="padding:0;width:24px;height:24px;font-size:1.1rem" onclick="event.stopPropagation(); openLeaveFilter()" title="Filter by leave status">🔍</button></th>
+                <th style="text-align:right;cursor:pointer;user-select:none" onclick="toggleAdminEmpSort('hours')">Hours <span id="adm-sort-hours"></span></th>
                 <th style="width:120px;text-align:center">Progress</th>
                 <th style="width:80px;text-align:center">Action</th>
               </tr>
@@ -1171,6 +1162,10 @@ const S = {
   adminEmployeeSelection: [],
   adminEmployeeVisibleIds: [],
   adminEmployeeGroups: [],
+  adminEmpSortCol: 'name',   // which column to sort by
+  adminEmpSortDir: 'asc',    // 'asc' or 'desc'
+  adminEmpFilterGroups: null, // null = show all, [] or ['group1'] = filter
+  adminEmpFilterLeave: null,  // null = show all, 'on' = only on leave, 'off' = only not on leave
   workplaceProjects: [],
   workplaceProjectsReady: false,
   planByDay: {},
@@ -2712,16 +2707,9 @@ async function loadAdminEmployees() {
     document.getElementById('tb-adm-emp').innerHTML='<tr><td colspan="8"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet. Share your invite link so employees can join on signup.</div></div></td></tr>'; return;
   }
 
-  // Populate group dropdown
+  // Update available groups
   const allGroups = [...new Set((members || []).map(m => m.group).filter(Boolean))].sort();
   S.adminEmployeeGroups = allGroups;
-  const groupDropdown = document.getElementById('adm-emp-group');
-  if (groupDropdown) {
-    const currentValue = groupDropdown.value;
-    groupDropdown.innerHTML = '<option value="">Show All Groups</option>' + 
-      allGroups.map(g => `<option value="${escHtml(g)}">${escHtml(g)}</option>`).join('');
-    groupDropdown.value = currentValue;
-  }
   ['adm-emp-groups', 'ae-groups'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = allGroups.map(g => `<option value="${escHtml(g)}"></option>`).join('');
@@ -2757,26 +2745,53 @@ async function loadAdminEmployees() {
   const validIds = new Set(empData.map(e => e.memberId));
   S.adminEmployeeSelection = (S.adminEmployeeSelection || []).filter(id => validIds.has(id));
 
-  // Filter by group if selected
-  const selectedGroup = document.getElementById('adm-emp-group')?.value || '';
-  const filtered = selectedGroup ? empData.filter(e => e.group === selectedGroup) : empData;
+  // Apply group filter
+  let filtered = empData;
+  if (S.adminEmpFilterGroups !== null && S.adminEmpFilterGroups.length > 0) {
+    filtered = filtered.filter(e => S.adminEmpFilterGroups.includes(e.group || ''));
+  }
+
+  // Apply leave filter
+  if (S.adminEmpFilterLeave !== null) {
+    if (S.adminEmpFilterLeave === 'on') {
+      filtered = filtered.filter(e => e.onLeave);
+    } else if (S.adminEmpFilterLeave === 'off') {
+      filtered = filtered.filter(e => !e.onLeave);
+    }
+  }
+
   S.adminEmployeeVisibleIds = filtered.map(e => e.memberId);
 
   // Sort
-  const sortMode = document.getElementById('adm-emp-sort')?.value || 'name-asc';
-  if (sortMode === 'name-asc') {
+  if (S.adminEmpSortCol === 'name') {
     filtered.sort((a, b) => a.firstName.localeCompare(b.firstName));
-  } else if (sortMode === 'lastname-asc') {
+  } else if (S.adminEmpSortCol === 'lastname') {
     filtered.sort((a, b) => a.lastName.localeCompare(b.lastName));
-  } else if (sortMode === 'hours-desc') {
-    filtered.sort((a, b) => b.wh - a.wh);
-  } else if (sortMode === 'hours-asc') {
+  } else if (S.adminEmpSortCol === 'hours') {
     filtered.sort((a, b) => a.wh - b.wh);
+  } else if (S.adminEmpSortCol === 'group') {
+    filtered.sort((a, b) => (a.group || '').localeCompare(b.group || ''));
+  } else if (S.adminEmpSortCol === 'leave') {
+    filtered.sort((a, b) => (b.onLeave ? 1 : 0) - (a.onLeave ? 1 : 0));
+  } else if (S.adminEmpSortCol === 'role') {
+    filtered.sort((a, b) => a.role.localeCompare(b.role));
+  }
+  
+  if (S.adminEmpSortDir === 'desc') {
+    filtered.reverse();
+  }
+
+  // Update sort indicators
+  document.querySelectorAll('#adm-emp-list thead th span[id^="adm-sort-"]').forEach(el => el.textContent = '');
+  const sortMap = { name: 'name', role: 'role', group: 'group', leave: 'leave', hours: 'hours' };
+  const sortCol = sortMap[S.adminEmpSortCol] || S.adminEmpSortCol;
+  if (document.getElementById('adm-sort-' + sortCol)) {
+    document.getElementById('adm-sort-' + sortCol).textContent = S.adminEmpSortDir === 'asc' ? '↑' : '↓';
   }
 
   if (!filtered.length) {
     syncAdminEmployeeSelectionUi();
-    document.getElementById('tb-adm-emp').innerHTML='<tr><td colspan="8"><div class="empty"><div class="empty-icon">🗂️</div><div class="empty-txt">No employees match this group filter.</div></div></td></tr>';
+    document.getElementById('tb-adm-emp').innerHTML='<tr><td colspan="8"><div class="empty"><div class="empty-icon">🗂️</div><div class="empty-txt">No employees match these filters.</div></div></td></tr>';
     return;
   }
 
@@ -2786,7 +2801,7 @@ async function loadAdminEmployees() {
     </td>
     <td style="font-weight:500">${e.name}</td>
     <td>${e.role==='admin'?'👑 Admin':'👤 Employee'}</td>
-    <td>${e.group ? `<span style="font-size:.85rem;color:var(--text);padding:.25rem .5rem;background:var(--bg-elevated);border-radius:3px">📁 ${e.group}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+    <td>${e.group ? `<span style="font-size:.85rem;color:var(--text);padding:.25rem .5rem;background:var(--bg-elevated);border-radius:3px">📁 ${escHtml(e.group)}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
     <td style="text-align:center">${e.onLeave ? '<span style="color:#f59e0b;font-weight:500">✈️ On Leave</span>' : '<span style="color:var(--muted)">—</span>'}</td>
     <td style="text-align:right">${e.wh.toFixed(1)}h <span style="color:var(--muted);font-size:.8rem">/ ${e.target}</span></td>
     <td style="text-align:center"><div class="prog-wrap" style="margin:0;height:4px;width:100px"><div class="prog-bar" style="width:${e.pct}%"></div></div><div style="font-size:.75rem;color:var(--muted);margin-top:.2rem">${e.pct.toFixed(0)}%</div></td>
@@ -2794,6 +2809,108 @@ async function loadAdminEmployees() {
   </tr>`);
   document.getElementById('tb-adm-emp').innerHTML = rowsHtml.join('');
   syncAdminEmployeeSelectionUi();
+}
+
+function toggleAdminEmpSort(col) {
+  if (S.adminEmpSortCol === col) {
+    S.adminEmpSortDir = S.adminEmpSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    S.adminEmpSortCol = col;
+    S.adminEmpSortDir = 'asc';
+  }
+  loadAdminEmployees();
+}
+
+function openGroupFilter() {
+  const groups = S.adminEmployeeGroups || [];
+  const selected = S.adminEmpFilterGroups || [];
+  let html = '<div style="padding:1rem;background:var(--bg);border-radius:6px;border:1px solid var(--border)">';
+  html += '<div style="margin-bottom:.75rem;font-weight:500">Filter by Group</div>';
+  html += groups.map(g => `
+    <label style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;cursor:pointer">
+      <input type="checkbox" ${selected.includes(g) ? 'checked' : ''} onchange="setGroupFilter('${escHtml(g)}', this.checked)">
+      📁 ${escHtml(g)}
+    </label>
+  `).join('');
+  html += '<button class="btn btn-ghost btn-sm" style="margin-top:.5rem;width:100%" onclick="clearGroupFilter()">Clear All Filters</button>';
+  html += '</div>';
+  
+  const popup = document.createElement('div');
+  popup.id = 'group-filter-popup';
+  popup.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:300px';
+  popup.innerHTML = html + '<button class="btn btn-primary btn-sm" style="width:100%;margin-top:.75rem" onclick="closeGroupFilter()">Done</button>';
+  document.body.appendChild(popup);
+  
+  // Close on outside click
+  document.addEventListener('click', e => {
+    if (!popup.contains(e.target) && e.target.textContent !== '🔍') {
+      closeGroupFilter();
+    }
+  }, { once: true });
+}
+
+function setGroupFilter(group, checked) {
+  if (!S.adminEmpFilterGroups) S.adminEmpFilterGroups = [];
+  if (checked) {
+    if (!S.adminEmpFilterGroups.includes(group)) S.adminEmpFilterGroups.push(group);
+  } else {
+    S.adminEmpFilterGroups = S.adminEmpFilterGroups.filter(g => g !== group);
+  }
+}
+
+function clearGroupFilter() {
+  S.adminEmpFilterGroups = null;
+  loadAdminEmployees();
+  closeGroupFilter();
+}
+
+function closeGroupFilter() {
+  const popup = document.getElementById('group-filter-popup');
+  if (popup) popup.remove();
+}
+
+function openLeaveFilter() {
+  const current = S.adminEmpFilterLeave || null;
+  let html = '<div style="padding:1rem;background:var(--bg);border-radius:6px;border:1px solid var(--border)">';
+  html += '<div style="margin-bottom:.75rem;font-weight:500">Filter by Leave Status</div>';
+  html += `
+    <label style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;cursor:pointer">
+      <input type="radio" name="leave-filter" ${current === null ? 'checked' : ''} onchange="setLeaveFilter(null)">
+      Show All
+    </label>
+    <label style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;cursor:pointer">
+      <input type="radio" name="leave-filter" ${current === 'on' ? 'checked' : ''} onchange="setLeaveFilter('on')">
+      ✈️ Only On Leave
+    </label>
+    <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+      <input type="radio" name="leave-filter" ${current === 'off' ? 'checked' : ''} onchange="setLeaveFilter('off')">
+      ✓ Only Not On Leave
+    </label>
+  `;
+  html += '</div>';
+  
+  const popup = document.createElement('div');
+  popup.id = 'leave-filter-popup';
+  popup.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:280px';
+  popup.innerHTML = html + '<button class="btn btn-primary btn-sm" style="width:100%;margin-top:.75rem" onclick="closeLeaveFilter()">Done</button>';
+  document.body.appendChild(popup);
+  
+  // Close on outside click
+  document.addEventListener('click', e => {
+    if (!popup.contains(e.target) && e.target.textContent !== '🔍') {
+      closeLeaveFilter();
+    }
+  }, { once: true });
+}
+
+function setLeaveFilter(val) {
+  S.adminEmpFilterLeave = val;
+  loadAdminEmployees();
+}
+
+function closeLeaveFilter() {
+  const popup = document.getElementById('leave-filter-popup');
+  if (popup) popup.remove();
 }
 
 function syncAdminEmployeeSelectionUi() {
