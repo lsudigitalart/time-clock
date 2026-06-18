@@ -2834,7 +2834,7 @@ async function loadAdminEmployees() {
     <td style="font-weight:500">${e.name}</td>
     <td>${e.role==='admin'?'👑 Admin':'👤 Employee'}</td>
     <td onclick="event.stopPropagation()" style="padding:0;cursor:text">
-      <div class="group-edit" data-member-id="${JSON.stringify(e.memberId)}" contenteditable="true" style="padding:.25rem .5rem;min-height:1.4em;border-radius:3px;background:var(--bg-elevated);word-break:break-word" onblur="saveAdminEmployeeGroup(this)" onkeydown="handleGroupKeydown(event, this)" title="Click to edit or delete">${e.group ? escHtml(e.group) : ''}</div>
+      <div class="group-edit" data-member-id="${e.memberId}" contenteditable="true" style="padding:.25rem .5rem;min-height:1.4em;border-radius:3px;background:var(--bg-elevated);word-break:break-word" onblur="saveAdminEmployeeGroup(this)" onkeydown="handleGroupKeydown(event, this)" title="Click to edit or delete">${e.group ? escHtml(e.group) : ''}</div>
     </td>
     <td style="text-align:center">${
       e.onLeave
@@ -2982,10 +2982,9 @@ async function saveAdminEmployeeGroup(el) {
   if (!memberId) return;
 
   const newGroup = (el.textContent || '').trim() || null;
-  const memberIdParsed = JSON.parse(memberId);
   const selected = S.adminEmployeeSelection || [];
-  const applyToSelected = selected.length > 0 && selected.includes(memberIdParsed);
-  const targetIds = applyToSelected ? selected : [memberIdParsed];
+  const applyToSelected = selected.length > 0 && selected.includes(memberId);
+  const targetIds = applyToSelected ? selected : [memberId];
 
   const { error } = await sb.from('workplace_members')
     .update({ group: newGroup })
