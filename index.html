@@ -852,7 +852,10 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <button class="m-close" onclick="closeModal()">✕</button>
     <div class="flex-center jb" style="margin-bottom:.25rem">
       <div class="m-title" id="adm-emp-hist-title" style="margin:0">Employee History</div>
-      <button class="btn btn-danger btn-sm" id="adm-emp-del-btn" onclick="adminDeleteEmployeeCurrent()">Delete Account</button>
+      <div class="flex-center gap2">
+        <button class="btn btn-primary btn-sm" onclick="openAdminTimeOffModal()">+ Time Off</button>
+        <button class="btn btn-danger btn-sm" id="adm-emp-del-btn" onclick="adminDeleteEmployeeCurrent()">Delete Account</button>
+      </div>
     </div>
     <div id="adm-emp-email" style="color:var(--muted);font-size:.85rem;margin-bottom:1rem"></div>
     <div class="flex-center gap2" style="margin-bottom:1rem">
@@ -922,6 +925,38 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
     <div class="m-footer">
       <button class="btn btn-primary" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- Admin: Add Time Off for Employee -->
+  <div class="modal hidden" id="m-adm-timeoff">
+    <button class="m-close" onclick="showOnly('m-adm-emp-hist')">✕</button>
+    <div class="m-title">🌴 Add Time Off</div>
+    <div id="adm-to-for" style="color:var(--muted);font-size:.85rem;margin-bottom:1rem"></div>
+    <div class="frow mb2">
+      <div class="fld mb1"><label class="lbl">Start Date</label>
+        <input type="date" id="adm-to-start" class="inp"></div>
+      <div class="fld mb1"><label class="lbl">End Date</label>
+        <input type="date" id="adm-to-end" class="inp"></div>
+    </div>
+    <div class="fld"><label class="lbl">Reason</label>
+      <select id="adm-to-reason" class="inp">
+        <option>Vacation</option><option>Sick Leave</option>
+        <option>Personal</option><option>Holiday</option><option>Other</option>
+      </select>
+    </div>
+    <div class="fld"><label class="lbl">Notes (optional)</label>
+      <input type="text" id="adm-to-notes" class="inp" placeholder="Any details..."></div>
+    <div class="fld">
+      <label class="hint" style="display:flex;align-items:center;gap:.4rem">
+        <input type="checkbox" id="adm-to-approved" checked>
+        Auto-approve this request
+      </label>
+    </div>
+    <div id="adm-to-err" class="err-msg"></div>
+    <div class="m-footer">
+      <button class="btn btn-ghost" onclick="showOnly('m-adm-emp-hist')">Cancel</button>
+      <button class="btn btn-primary" id="adm-to-btn" onclick="submitAdminTimeOff()">Save</button>
     </div>
   </div>
 
@@ -1737,6 +1772,62 @@ function openEditEntryModal(id) {
   document.getElementById('ee-err').classList.remove('on');
   document.getElementById('m-edit-entry').dataset.adminMode = '';
   showOnly('m-edit-entry');
+}
+
+function openAdminTimeOffModal() {
+  if (!AH.userId) return;
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('adm-to-start').value = today;
+  document.getElementById('adm-to-end').value   = today;
+  document.getElementById('adm-to-notes').value  = '';
+  document.getElementById('adm-to-approved').checked = true;
+  document.getElementById('adm-to-err').classList.remove('on');
+  document.getElementById('adm-to-for').textContent = `For: ${AH.name}${AH.email ? ' · ' + AH.email : ''}`;
+  const btn = document.getElementById('adm-to-btn');
+  btn.disabled = false; btn.textContent = 'Save';
+  showOnly('m-adm-timeoff');
+}
+
+async function submitAdminTimeOff() {
+  const errEl = document.getElementById('adm-to-err');
+  const btn   = document.getElementById('adm-to-btn');
+  errEl.classList.remove('on');
+
+  const start  = document.getElementById('adm-to-start').value;
+  const end    = document.getElementById('adm-to-end').value;
+  if (!start || !end) { errEl.textContent = 'Please select a date range.'; errEl.classList.add('on'); return; }
+  if (end < start)    { errEl.textContent = 'End date must be on or after start date.'; errEl.classList.add('on'); return; }
+
+  const reason   = document.getElementById('adm-to-reason').value;
+  const notes    = document.getElementById('adm-to-notes').value.trim() || null;
+  const approved = document.getElementById('adm-to-approved').checked;
+  const status   = approved ? 'approved' : 'pending';
+  const archived = approved;
+
+  btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Saving…';
+
+  const msPerDay = 86400000;
+  const days = Math.round((new Date(end+'T12:00') - new Date(start+'T12:00')) / msPerDay) + 1;
+
+  const { error } = await sb.from('time_off_requests').insert({
+    user_id:      AH.userId,
+    workplace_id: S.workplace.id,
+    start_date:   start,
+    end_date:     end,
+    reason, notes, status,
+    archived,
+    archived_at: archived ? new Date().toISOString() : null,
+  });
+
+  if (error) {
+    errEl.textContent = error.message; errEl.classList.add('on');
+    btn.disabled = false; btn.textContent = 'Save';
+    return;
+  }
+
+  showOnly('m-adm-emp-hist');
+  toast(`Time off added for ${AH.name} (${days} day${days===1?'':'s'}, ${status})!`, 'ok');
+  await loadAdminTimeOff();
 }
 
 function openTimeOffModal() {
