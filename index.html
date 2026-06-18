@@ -732,11 +732,11 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <thead>
               <tr>
                 <th style="width:32px"></th>
-                <th style="cursor:pointer;user-select:none" onclick="toggleAdminEmpSort('name')">Name <span id="adm-sort-name"></span></th>
-                <th style="cursor:pointer;user-select:none" onclick="toggleAdminEmpSort('role')">Role <span id="adm-sort-role"></span></th>
-                <th style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:.3rem" onclick="toggleAdminEmpSort('group')">Group <span id="adm-sort-group"></span> <button class="btn btn-ghost" style="padding:0;width:24px;height:24px;font-size:1.1rem" onclick="event.stopPropagation(); openGroupFilter()" title="Filter by group">🔍</button></th>
-                <th style="text-align:center;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:center;gap:.3rem" onclick="toggleAdminEmpSort('leave')">Leave <span id="adm-sort-leave"></span> <button class="btn btn-ghost" style="padding:0;width:24px;height:24px;font-size:1.1rem" onclick="event.stopPropagation(); openLeaveFilter()" title="Filter by leave status">🔍</button></th>
-                <th style="text-align:right;cursor:pointer;user-select:none" onclick="toggleAdminEmpSort('hours')">Hours <span id="adm-sort-hours"></span></th>
+                <th style="cursor:pointer;user-select:none;text-align:left" onclick="toggleAdminEmpSort('name')">Name <span id="adm-sort-name"></span></th>
+                <th style="cursor:pointer;user-select:none;text-align:left" onclick="toggleAdminEmpSort('role')">Role <span id="adm-sort-role"></span></th>
+                <th style="cursor:pointer;user-select:none;text-align:left;position:relative" onclick="toggleAdminEmpSort('group')">Group <span id="adm-sort-group"></span> <button class="btn btn-ghost" style="padding:0;width:20px;height:20px;font-size:.95rem;margin-left:.3rem;vertical-align:middle" onclick="event.stopPropagation(); openGroupFilter()" title="Filter by group">🔍</button></th>
+                <th style="cursor:pointer;user-select:none;text-align:center;position:relative" onclick="toggleAdminEmpSort('leave')">Leave <span id="adm-sort-leave"></span> <button class="btn btn-ghost" style="padding:0;width:20px;height:20px;font-size:.95rem;margin-left:.3rem;vertical-align:middle" onclick="event.stopPropagation(); openLeaveFilter()" title="Filter by leave status">🔍</button></th>
+                <th style="cursor:pointer;user-select:none;text-align:right" onclick="toggleAdminEmpSort('hours')">Hours <span id="adm-sort-hours"></span></th>
                 <th style="width:120px;text-align:center">Progress</th>
                 <th style="width:80px;text-align:center">Action</th>
               </tr>
