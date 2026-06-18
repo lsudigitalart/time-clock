@@ -2927,11 +2927,14 @@ async function saveAdminEmployeeGroup(el) {
   if (!memberId) return;
 
   const newGroup = (el.textContent || '').trim() || null;
-  const memberId_parsed = JSON.parse(memberId);
+  const memberIdParsed = JSON.parse(memberId);
+  const selected = S.adminEmployeeSelection || [];
+  const applyToSelected = selected.length > 0 && selected.includes(memberIdParsed);
+  const targetIds = applyToSelected ? selected : [memberIdParsed];
 
   const { error } = await sb.from('workplace_members')
     .update({ group: newGroup })
-    .eq('id', memberId_parsed)
+    .in('id', targetIds)
     .eq('workplace_id', S.workplace.id);
 
   if (error) {
@@ -2940,7 +2943,16 @@ async function saveAdminEmployeeGroup(el) {
     return;
   }
 
-  toast(newGroup ? `Group set to "${newGroup}".` : 'Group cleared.', 'ok');
+  if (targetIds.length > 1) {
+    toast(
+      newGroup
+        ? `Group set to "${newGroup}" for ${targetIds.length} employees.`
+        : `Group cleared for ${targetIds.length} employees.`,
+      'ok'
+    );
+  } else {
+    toast(newGroup ? `Group set to "${newGroup}".` : 'Group cleared.', 'ok');
+  }
   await loadAdminEmployees();
 }
 
