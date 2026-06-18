@@ -710,7 +710,23 @@ tr:hover td{background:rgba(255,255,255,.015)}
             </div>
           </div>
           <p class="hint" style="margin:-.45rem 0 1rem">Type a new group name here to create it, or pick an existing one, then apply it to the selected employees.</p>
-        <div id="adm-emp-list"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet</div></div></div>
+        <div class="tbl-wrap">
+          <table id="adm-emp-list">
+            <thead>
+              <tr>
+                <th style="width:32px"></th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Group</th>
+                <th style="text-align:center">Leave</th>
+                <th style="text-align:right">Hours</th>
+                <th style="width:120px;text-align:center">Progress</th>
+                <th style="width:80px;text-align:center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="tb-adm-emp"></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card sec">
@@ -2558,7 +2574,7 @@ async function loadAdminEmployees() {
     S.adminEmployeeSelection = [];
     S.adminEmployeeGroups = [];
     syncAdminEmployeeSelectionUi();
-    list.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet. Share your invite link so employees can join on signup.</div></div>'; return;
+    document.getElementById('tb-adm-emp').innerHTML='<tr><td colspan="8"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet. Share your invite link so employees can join on signup.</div></div></td></tr>'; return;
   }
 
   // Populate group dropdown
@@ -2625,31 +2641,23 @@ async function loadAdminEmployees() {
 
   if (!filtered.length) {
     syncAdminEmployeeSelectionUi();
-    list.innerHTML='<div class="empty"><div class="empty-icon">🗂️</div><div class="empty-txt">No employees match this group filter.</div></div>';
+    document.getElementById('tb-adm-emp').innerHTML='<tr><td colspan="8"><div class="empty"><div class="empty-icon">🗂️</div><div class="empty-txt">No employees match this group filter.</div></div></td></tr>';
     return;
   }
 
-  const rowsHtml = filtered.map(e => `<div class="emp-row" style="cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:.8rem;align-items:center" onclick='openAdminEmpHistory(${JSON.stringify(e.uid)},${JSON.stringify(e.name)},${JSON.stringify(e.email)})' title="View &amp; edit history">
-    <div onclick="event.stopPropagation()">
+  const rowsHtml = filtered.map(e => `<tr style="cursor:pointer" onclick='openAdminEmpHistory(${JSON.stringify(e.uid)},${JSON.stringify(e.name)},${JSON.stringify(e.email)})' title="View history">
+    <td onclick="event.stopPropagation()">
       <input type="checkbox" data-member-checkbox="1" ${S.adminEmployeeSelection.includes(e.memberId) ? 'checked' : ''} onclick="event.stopPropagation()" onchange='toggleAdminEmployeeSelection(${JSON.stringify(e.memberId)}, this.checked)'>
-    </div>
-    <div>
-      <div class="emp-name">${e.name}</div>
-      <div class="emp-role">${e.role==='admin'?'👑 Admin':'👤 Employee'}</div>
-      <div style="margin-top:.3rem;display:flex;gap:.4rem;flex-wrap:wrap">
-        ${e.group ? `<span style="font-size:.7rem;color:var(--muted);padding:.2rem .4rem;background:var(--bg-elevated);border-radius:3px">📁 ${e.group}</span>` : ''}
-        ${e.onLeave ? `<span style="font-size:.7rem;color:#f59e0b;padding:.2rem .4rem;background:rgba(245,158,11,.1);border-radius:3px;font-weight:500">✈️ On Leave</span>` : ''}
-      </div>
-    </div>
-    <div>
-      <div class="emp-hrs-val">${e.wh.toFixed(1)}h <span style="color:var(--muted);font-size:.75rem">/ ${e.target}h</span></div>
-      <div class="prog-wrap" style="margin:.3rem 0;height:5px;width:120px">
-        <div class="prog-bar" style="width:${e.pct}%"></div>
-      </div>
-      <div class="emp-hrs-sub" style="font-size:.7rem">${e.pct.toFixed(0)}% this week &middot; <span style="color:var(--accent)">View history ›</span></div>
-    </div>
-  </div>`);
-  list.innerHTML = rowsHtml.join('');
+    </td>
+    <td style="font-weight:500">${e.name}</td>
+    <td>${e.role==='admin'?'👑 Admin':'👤 Employee'}</td>
+    <td>${e.group ? `<span style="font-size:.85rem;color:var(--text);padding:.25rem .5rem;background:var(--bg-elevated);border-radius:3px">📁 ${e.group}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+    <td style="text-align:center">${e.onLeave ? '<span style="color:#f59e0b;font-weight:500">✈️ On Leave</span>' : '<span style="color:var(--muted)">—</span>'}</td>
+    <td style="text-align:right">${e.wh.toFixed(1)}h <span style="color:var(--muted);font-size:.8rem">/ ${e.target}</span></td>
+    <td style="text-align:center"><div class="prog-wrap" style="margin:0;height:4px;width:100px"><div class="prog-bar" style="width:${e.pct}%"></div></div><div style="font-size:.75rem;color:var(--muted);margin-top:.2rem">${e.pct.toFixed(0)}%</div></td>
+    <td style="text-align:center"><button class="btn btn-ghost btn-sm" style="padding:.25rem .5rem;font-size:.8rem" onclick="event.stopPropagation(); openAdminEmpHistory(${JSON.stringify(e.uid)},${JSON.stringify(e.name)},${JSON.stringify(e.email)})">View ›</button></td>
+  </tr>`);
+  document.getElementById('tb-adm-emp').innerHTML = rowsHtml.join('');
   syncAdminEmployeeSelectionUi();
 }
 
