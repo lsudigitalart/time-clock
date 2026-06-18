@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS public.workplace_members (
   UNIQUE (workplace_id, user_id)
 );
 
+ALTER TABLE public.workplace_members
+  ADD COLUMN IF NOT EXISTS "group" text;
+
 -- Time entries (clock in / clock out)
 CREATE TABLE IF NOT EXISTS public.time_entries (
   id                uuid PRIMARY KEY DEFAULT uuid_generate_v4(),

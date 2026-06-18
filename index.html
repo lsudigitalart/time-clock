@@ -694,6 +694,21 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <button class="btn btn-ghost btn-sm" onclick="loadAdminPage()">↺ Refresh</button>
           </div>
         </div>
+          <div class="flex-center jb" style="gap:.8rem;flex-wrap:wrap;margin:-.35rem 0 1rem">
+            <div class="flex-center gap2" style="flex-wrap:wrap">
+              <label class="hint" style="display:flex;align-items:center;gap:.45rem;margin:0">
+                <input type="checkbox" id="adm-emp-select-all" onchange="toggleAdminEmployeeSelectionAll(this.checked)">
+                Select visible
+              </label>
+              <span class="hint"><span id="adm-emp-sel-cnt">0</span> selected</span>
+            </div>
+            <div class="flex-center gap2" style="flex-wrap:wrap">
+              <input type="text" id="adm-emp-bulk-group" class="inp" style="width:220px" placeholder="Assign group" list="adm-emp-groups">
+              <datalist id="adm-emp-groups"></datalist>
+              <button class="btn btn-ghost btn-sm" id="adm-emp-apply-group" onclick="applyAdminEmployeeGroup()" disabled>Apply Group</button>
+              <button class="btn btn-ghost btn-sm" id="adm-emp-clear-group" onclick="clearAdminEmployeeGroup()" disabled>Clear Group</button>
+            </div>
+          </div>
         <div id="adm-emp-list"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet</div></div></div>
       </div>
 
@@ -1087,6 +1102,9 @@ const S = {
   adminTimeOffArchived: false,
   adminCalendarMode: 'timeoff',
   adminCalendarWorker: '',
+  adminEmployeeSelection: [],
+  adminEmployeeVisibleIds: [],
+  adminEmployeeGroups: [],
   planByDay: {},
   adminCalendarEvents: {},
   adminCalendarOverflow: {},
@@ -2397,22 +2415,33 @@ async function loadAdminEmployees() {
     .select('*, profile:profiles(id,full_name,role,email,planned_hours_per_week)')
     .eq('workplace_id', S.workplace.id);
 
+  const escHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
   const list = document.getElementById('adm-emp-list');
   document.getElementById('adm-emp-cnt').textContent = members?.length || 0;
 
   if (!members?.length) {
+    S.adminEmployeeVisibleIds = [];
+    S.adminEmployeeSelection = [];
+    S.adminEmployeeGroups = [];
+    syncAdminEmployeeSelectionUi();
     list.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet. Share your invite link so employees can join on signup.</div></div>'; return;
   }
 
   // Populate group dropdown
   const allGroups = [...new Set((members || []).map(m => m.group).filter(Boolean))].sort();
+  S.adminEmployeeGroups = allGroups;
   const groupDropdown = document.getElementById('adm-emp-group');
   if (groupDropdown) {
     const currentValue = groupDropdown.value;
     groupDropdown.innerHTML = '<option value="">Show All Groups</option>' + 
-      allGroups.map(g => `<option value="${g}">${g}</option>`).join('');
+      allGroups.map(g => `<option value="${escHtml(g)}">${escHtml(g)}</option>`).join('');
     groupDropdown.value = currentValue;
   }
+  ['adm-emp-groups', 'ae-groups'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = allGroups.map(g => `<option value="${escHtml(g)}"></option>`).join('');
+  });
 
   const { start, end } = weekRange();
   const empData = await Promise.all(members.map(async m => {
@@ -2438,12 +2467,16 @@ async function loadAdminEmployees() {
     const name = m.profile?.full_name || 'Unknown';
     const email = m.profile?.email || '';
     const nameParts = name.split(/\s+/);
-    return { uid, name, email, wh, target, pct, role: m.role, group: m.group, onLeave, firstName: nameParts[0], lastName: nameParts.slice(1).join(' ') || nameParts[0] };
+    return { memberId: m.id, uid, name, email, wh, target, pct, role: m.role, group: m.group, onLeave, firstName: nameParts[0], lastName: nameParts.slice(1).join(' ') || nameParts[0] };
   }));
+
+  const validIds = new Set(empData.map(e => e.memberId));
+  S.adminEmployeeSelection = (S.adminEmployeeSelection || []).filter(id => validIds.has(id));
 
   // Filter by group if selected
   const selectedGroup = document.getElementById('adm-emp-group')?.value || '';
   const filtered = selectedGroup ? empData.filter(e => e.group === selectedGroup) : empData;
+  S.adminEmployeeVisibleIds = filtered.map(e => e.memberId);
 
   // Sort
   const sortMode = document.getElementById('adm-emp-sort')?.value || 'name-asc';
@@ -2457,7 +2490,16 @@ async function loadAdminEmployees() {
     filtered.sort((a, b) => a.wh - b.wh);
   }
 
-  const rowsHtml = filtered.map(e => `<div class="emp-row" style="cursor:pointer" onclick="openAdminEmpHistory('${e.uid}','${e.name}','${e.email}')" title="View &amp; edit history">
+  if (!filtered.length) {
+    syncAdminEmployeeSelectionUi();
+    list.innerHTML='<div class="empty"><div class="empty-icon">🗂️</div><div class="empty-txt">No employees match this group filter.</div></div>';
+    return;
+  }
+
+  const rowsHtml = filtered.map(e => `<div class="emp-row" style="cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:.8rem;align-items:center" onclick='openAdminEmpHistory(${JSON.stringify(e.uid)},${JSON.stringify(e.name)},${JSON.stringify(e.email)})' title="View &amp; edit history">
+    <div onclick="event.stopPropagation()">
+      <input type="checkbox" data-member-checkbox="1" ${S.adminEmployeeSelection.includes(e.memberId) ? 'checked' : ''} onchange="toggleAdminEmployeeSelection(${JSON.stringify(e.memberId)}, this.checked)">
+    </div>
     <div>
       <div class="emp-name">${e.name}</div>
       <div class="emp-role">${e.role==='admin'?'👑 Admin':'👤 Employee'}</div>
@@ -2475,6 +2517,79 @@ async function loadAdminEmployees() {
     </div>
   </div>`);
   list.innerHTML = rowsHtml.join('');
+  syncAdminEmployeeSelectionUi();
+}
+
+function syncAdminEmployeeSelectionUi() {
+  const selected = S.adminEmployeeSelection || [];
+  const visible = S.adminEmployeeVisibleIds || [];
+  const visibleSelected = visible.filter(id => selected.includes(id)).length;
+  const countEl = document.getElementById('adm-emp-sel-cnt');
+  if (countEl) countEl.textContent = selected.length;
+
+  const selectAll = document.getElementById('adm-emp-select-all');
+  if (selectAll) {
+    selectAll.checked = visible.length > 0 && visibleSelected === visible.length;
+    selectAll.indeterminate = visibleSelected > 0 && visibleSelected < visible.length;
+  }
+
+  ['adm-emp-apply-group', 'adm-emp-clear-group'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = selected.length === 0;
+  });
+}
+
+function toggleAdminEmployeeSelection(memberId, checked) {
+  const selected = new Set(S.adminEmployeeSelection || []);
+  if (checked) selected.add(memberId);
+  else selected.delete(memberId);
+  S.adminEmployeeSelection = [...selected];
+  syncAdminEmployeeSelectionUi();
+}
+
+function toggleAdminEmployeeSelectionAll(checked) {
+  const selected = new Set(S.adminEmployeeSelection || []);
+  (S.adminEmployeeVisibleIds || []).forEach(id => {
+    if (checked) selected.add(id);
+    else selected.delete(id);
+  });
+  S.adminEmployeeSelection = [...selected];
+  document.querySelectorAll('#adm-emp-list input[data-member-checkbox="1"]').forEach(el => { el.checked = checked; });
+  syncAdminEmployeeSelectionUi();
+}
+
+async function applyAdminEmployeeGroup(clearGroup = false) {
+  const selected = S.adminEmployeeSelection || [];
+  if (!selected.length) { toast('Select employees first.', 'er'); return; }
+
+  const input = document.getElementById('adm-emp-bulk-group');
+  const nextGroup = clearGroup ? null : (input?.value || '').trim();
+  if (!clearGroup && !nextGroup) { toast('Enter a group name first.', 'er'); return; }
+
+  const applyBtn = document.getElementById('adm-emp-apply-group');
+  const clearBtn = document.getElementById('adm-emp-clear-group');
+  if (applyBtn) applyBtn.disabled = true;
+  if (clearBtn) clearBtn.disabled = true;
+
+  const { error } = await sb.from('workplace_members')
+    .update({ group: nextGroup })
+    .in('id', selected)
+    .eq('workplace_id', S.workplace.id);
+
+  if (error) {
+    syncAdminEmployeeSelectionUi();
+    toast(error.message || 'Bulk update failed.', 'er');
+    return;
+  }
+
+  S.adminEmployeeSelection = [];
+  if (input && clearGroup) input.value = '';
+  toast(clearGroup ? 'Group cleared for selected employees.' : `Assigned ${selected.length} employee${selected.length === 1 ? '' : 's'} to ${nextGroup}.`, 'ok');
+  await loadAdminEmployees();
+}
+
+function clearAdminEmployeeGroup() {
+  return applyAdminEmployeeGroup(true);
 }
 
 async function loadAdminStats() {
@@ -2929,8 +3044,12 @@ async function adminDeleteEmployee(userId, name) {
 function openAddEmployeeModal() {
   document.getElementById('ae-name').value = '';
   document.getElementById('ae-email').value = '';
+  document.getElementById('ae-group').value = '';
   document.getElementById('ae-pass').value = '';
   document.getElementById('ae-role').value = 'member';
+  const groups = S.adminEmployeeGroups || [];
+  const groupList = document.getElementById('ae-groups');
+  if (groupList) groupList.innerHTML = groups.map(g => `<option value="${String(g).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]))}"></option>`).join('');
   document.getElementById('ae-err').classList.remove('on');
   const btn = document.getElementById('ae-btn');
   btn.disabled = false; btn.textContent = 'Add Employee';
