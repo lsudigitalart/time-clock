@@ -63,6 +63,17 @@ CREATE TABLE IF NOT EXISTS public.time_entries (
   created_at        timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE public.time_entries
+  ADD COLUMN IF NOT EXISTS project_names text[] NOT NULL DEFAULT '{}'::text[];
+
+CREATE TABLE IF NOT EXISTS public.workplace_projects (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workplace_id  uuid NOT NULL REFERENCES public.workplaces(id) ON DELETE CASCADE,
+  name          text NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (workplace_id, name)
+);
+
 -- Time-off requests
 CREATE TABLE IF NOT EXISTS public.time_off_requests (
   id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -129,6 +140,7 @@ ALTER TABLE public.workplace_members   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.time_entries        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.time_off_requests   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.planned_shifts      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workplace_projects  ENABLE ROW LEVEL SECURITY;
 
 
 -- ── profiles ──────────────────────────────────────────────────
@@ -160,6 +172,16 @@ RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
   ) OR EXISTS (
     SELECT 1 FROM workplace_members m
     WHERE m.workplace_id = wid AND m.user_id = auth.uid() AND m.role = 'admin'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION is_workplace_member(wid uuid)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM workplaces w WHERE w.id = wid AND w.admin_id = auth.uid()
+  ) OR EXISTS (
+    SELECT 1 FROM workplace_members m
+    WHERE m.workplace_id = wid AND m.user_id = auth.uid()
   );
 $$;
 
@@ -200,6 +222,29 @@ CREATE POLICY "workplace_members: delete by admin or self"
   ON public.workplace_members FOR DELETE
   TO authenticated
   USING (auth.uid() = user_id OR is_workplace_admin(workplace_id));
+
+
+-- ── workplace_projects ───────────────────────────────────────
+
+CREATE POLICY "workplace_projects: read by workplace member"
+  ON public.workplace_projects FOR SELECT
+  TO authenticated
+  USING (is_workplace_member(workplace_id));
+
+CREATE POLICY "workplace_projects: insert by admin"
+  ON public.workplace_projects FOR INSERT
+  TO authenticated
+  WITH CHECK (is_workplace_admin(workplace_id));
+
+CREATE POLICY "workplace_projects: update by admin"
+  ON public.workplace_projects FOR UPDATE
+  TO authenticated
+  USING (is_workplace_admin(workplace_id));
+
+CREATE POLICY "workplace_projects: delete by admin"
+  ON public.workplace_projects FOR DELETE
+  TO authenticated
+  USING (is_workplace_admin(workplace_id));
 
 
 -- ── time_entries ──────────────────────────────────────────────

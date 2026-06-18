@@ -714,6 +714,18 @@ tr:hover td{background:rgba(255,255,255,.015)}
       </div>
 
       <div class="card sec">
+        <div class="card-title flex-center jb" style="margin-bottom:1rem">
+          <div class="flex-center gap2"><div class="card-dot"></div> Projects</div>
+        </div>
+        <div class="flex-center gap2" style="align-items:flex-start;flex-wrap:wrap;margin-bottom:.8rem">
+          <input type="text" id="adm-project-name" class="inp" style="flex:1;min-width:220px" placeholder="Add a project name">
+          <button class="btn btn-primary btn-sm" onclick="addAdminProject()">+ Add Project</button>
+        </div>
+        <p class="hint" style="margin:0 0 .9rem">These projects appear in the shift form so employees can tag the work they did. Users can select more than one.</p>
+        <div id="adm-project-list"><div class="empty"><div class="empty-icon">📁</div><div class="empty-txt">No projects yet</div></div></div>
+      </div>
+
+      <div class="card sec">
         <div class="card-title"><div class="card-dot"></div> Team Calendar</div>
         <div class="adm-cal-toolbar">
           <div class="adm-cal-modes">
@@ -798,6 +810,11 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <input type="text" id="ci-notes" class="inp" placeholder="What are you working on?">
     </div>
     <div class="fld">
+      <label class="lbl">Projects (optional)</label>
+      <select id="ci-projects" class="inp" multiple size="4"></select>
+      <p class="hint" id="ci-projects-hint">Admins can add projects on the Admin page. Hold Command to select multiple projects.</p>
+    </div>
+    <div class="fld">
       <label class="lbl">Automatic End Time (optional)</label>
       <div class="aco-tabs">
         <button type="button" class="aco-tab on" onclick="acoMode('none',this)">None</button>
@@ -864,6 +881,11 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="fld">
       <label class="lbl">Notes</label>
       <input type="text" id="ee-notes" class="inp" placeholder="What were you working on?">
+    </div>
+    <div class="fld">
+      <label class="lbl">Projects</label>
+      <select id="ee-projects" class="inp" multiple size="4"></select>
+      <p class="hint" id="ee-projects-hint">Hold Command to select multiple projects.</p>
     </div>
     <div id="ee-err" class="err-msg"></div>
     <div class="m-footer">
@@ -1107,6 +1129,8 @@ const S = {
   adminEmployeeSelection: [],
   adminEmployeeVisibleIds: [],
   adminEmployeeGroups: [],
+  workplaceProjects: [],
+  workplaceProjectsReady: false,
   planByDay: {},
   adminCalendarEvents: {},
   adminCalendarOverflow: {},
@@ -1516,6 +1540,7 @@ function setClockOutUI() {
    CLOCK IN / OUT
    ═══════════════════════════════════════════════ */
 function openClockInModal() {
+  loadWorkplaceProjects().then(() => renderProjectSelect('ci-projects', [])).catch(console.error);
   document.getElementById('ci-notes').value = '';
   document.getElementById('aco-h').value = '8';
   document.getElementById('aco-t').value = '';
@@ -1575,6 +1600,7 @@ async function doClockIn() {
     clock_in: new Date().toISOString(),
     auto_clockout_at: autoAt,
     notes: document.getElementById('ci-notes').value.trim() || null,
+    project_names: getSelectedProjectNames('ci-projects'),
     clock_in_lat: geo?.lat ?? null,
     clock_in_lng: geo?.lng ?? null,
     clock_in_accuracy_m: geo?.accuracy ?? null,
@@ -1762,7 +1788,7 @@ async function loadHistory() {
         <td class="td-mono">${fmtTime(ci)}</td>
         <td class="td-mono">${co ? fmtTime(co) : '—'}</td>
         <td class="td-mono">${co ? fmtDur((co-ci)/3600000) : '—'}</td>
-        <td>${e.notes || '<span style="color:var(--muted)">—</span>'}</td>
+        <td>${renderEntryDetails(e)}</td>
         <td><span class="badge bb">Clock</span></td>
         <td><button class="btn btn-ghost" style="padding:.2rem .6rem;font-size:.8rem" onclick="openEditEntryModal('${e.id}')">Edit</button></td>
       </tr>`;
@@ -1790,9 +1816,10 @@ async function loadHistory() {
 /* ═══════════════════════════════════════════════
    TIME OFF
    ═══════════════════════════════════════════════ */
-function openEditEntryModal(id) {
+async function openEditEntryModal(id) {
   const entry = S._historyCache?.find(e => e.id === id);
   if (!entry) { toast('Entry not found — please refresh', 'er'); return; }
+  await loadWorkplaceProjects();
   const toLocal = iso => {
     const d = new Date(iso);
     return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
@@ -1801,6 +1828,7 @@ function openEditEntryModal(id) {
   document.getElementById('ee-in').value    = toLocal(entry.clock_in);
   document.getElementById('ee-out').value   = entry.clock_out ? toLocal(entry.clock_out) : '';
   document.getElementById('ee-notes').value = entry.notes || '';
+  renderProjectSelect('ee-projects', entry.project_names || []);
   document.getElementById('ee-err').classList.remove('on');
   document.getElementById('m-edit-entry').dataset.adminMode = '';
   showOnly('m-edit-entry');
@@ -2104,7 +2132,7 @@ async function loadAdminPage() {
     const now = new Date();
     calMonthEl.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   }
-  await Promise.all([loadAdminEmployees(), loadAdminTimeOff(), loadAdminStats(), loadAdminCalendar()]);
+  await Promise.all([loadWorkplaceProjects(), loadAdminEmployees(), loadAdminProjects(), loadAdminTimeOff(), loadAdminStats(), loadAdminCalendar()]);
 }
 
 function setAdminCalendarMode(mode) {
@@ -2350,7 +2378,7 @@ async function loadAdminEmpHistory() {
       <td class="td-mono">${fmtTime(ci)}</td>
       <td class="td-mono">${co ? fmtTime(co) : '—'}</td>
       <td class="td-mono">${co ? fmtDur((co-ci)/3600000) : '—'}</td>
-      <td>${en.notes || '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${renderEntryDetails(en)}</td>
       <td>${locBadge}</td>
       <td><span class="badge bb">Clock</span></td>
       <td><button class="btn btn-ghost" style="padding:.2rem .6rem;font-size:.8rem" onclick="openAdminEditEntry('${en.id}')">Edit</button></td>
@@ -2358,9 +2386,10 @@ async function loadAdminEmpHistory() {
   }).join('');
 }
 
-function openAdminEditEntry(id) {
+async function openAdminEditEntry(id) {
   const entry = S._adminHistCache?.find(e => e.id === id);
   if (!entry) { toast('Entry not found — please refresh', 'er'); return; }
+  await loadWorkplaceProjects();
   const toLocal = iso => {
     const d = new Date(iso);
     return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
@@ -2369,6 +2398,7 @@ function openAdminEditEntry(id) {
   document.getElementById('ee-in').value    = toLocal(entry.clock_in);
   document.getElementById('ee-out').value   = entry.clock_out ? toLocal(entry.clock_out) : '';
   document.getElementById('ee-notes').value = entry.notes || '';
+  renderProjectSelect('ee-projects', entry.project_names || []);
   document.getElementById('ee-err').classList.remove('on');
   // Tag modal so save knows which flow to use
   document.getElementById('m-edit-entry').dataset.adminMode = '1';
@@ -2382,6 +2412,7 @@ async function saveEditEntry() {
   const inVal  = document.getElementById('ee-in').value;
   const outVal = document.getElementById('ee-out').value;
   const notes  = document.getElementById('ee-notes').value.trim() || null;
+  const project_names = getSelectedProjectNames('ee-projects');
   const adminMode = document.getElementById('m-edit-entry').dataset.adminMode === '1';
 
   if (!inVal) { errEl.textContent = 'Clock-in time is required.'; errEl.classList.add('on'); return; }
@@ -2391,7 +2422,7 @@ async function saveEditEntry() {
     errEl.textContent = 'Clock-out must be after clock-in.'; errEl.classList.add('on'); return;
   }
 
-  let query = sb.from('time_entries').update({ clock_in: clockIn, clock_out: clockOut, notes }).eq('id', id);
+  let query = sb.from('time_entries').update({ clock_in: clockIn, clock_out: clockOut, notes, project_names }).eq('id', id);
   if (!adminMode) query = query.eq('user_id', S.user.id);
 
   const { error } = await query;
@@ -2412,12 +2443,112 @@ async function saveEditEntry() {
   }
 }
 
+async function loadWorkplaceProjects() {
+  if (!S.workplace?.id) {
+    S.workplaceProjects = [];
+    S.workplaceProjectsReady = false;
+    return [];
+  }
+
+  const { data, error } = await sb.from('workplace_projects')
+    .select('id,name')
+    .eq('workplace_id', S.workplace.id)
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('Failed to load workplace projects', error);
+    S.workplaceProjects = [];
+    S.workplaceProjectsReady = false;
+    return [];
+  }
+
+  S.workplaceProjects = data || [];
+  S.workplaceProjectsReady = true;
+  return S.workplaceProjects;
+}
+
+function renderProjectSelect(selectId, selectedNames = []) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+
+  const hint = document.getElementById(`${selectId}-hint`);
+  const names = [...new Set([...(S.workplaceProjects || []).map(p => p.name), ...(selectedNames || [])].filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+
+  if (!names.length) {
+    select.innerHTML = '';
+    select.disabled = true;
+    if (hint) hint.textContent = 'No projects have been added yet. An admin can add them on the Admin page.';
+    return;
+  }
+
+  select.disabled = false;
+  select.innerHTML = names.map(name => `<option value="${escHtml(name)}" ${(selectedNames || []).includes(name) ? 'selected' : ''}>${escHtml(name)}</option>`).join('');
+  if (hint) hint.textContent = 'Hold Command to select multiple projects.';
+}
+
+function getSelectedProjectNames(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select || select.disabled) return [];
+  return [...select.options].filter(opt => opt.selected).map(opt => opt.value);
+}
+
+async function loadAdminProjects() {
+  const list = document.getElementById('adm-project-list');
+  if (!list) return;
+  if (!S.workplaceProjectsReady) await loadWorkplaceProjects();
+
+  const projects = S.workplaceProjects || [];
+  if (!projects.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">📁</div><div class="empty-txt">No projects yet</div></div>';
+    return;
+  }
+
+  list.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:.55rem">${projects.map(project => `<div style="display:flex;align-items:center;gap:.45rem;padding:.45rem .6rem;border:1px solid var(--line);border-radius:999px;background:var(--bg-elevated)"><span>${escHtml(project.name)}</span><button class="btn btn-ghost btn-sm" style="padding:.1rem .45rem" onclick='removeAdminProject(${JSON.stringify(project.id)}, ${JSON.stringify(project.name)})'>✕</button></div>`).join('')}</div>`;
+}
+
+async function addAdminProject() {
+  const input = document.getElementById('adm-project-name');
+  const name = (input?.value || '').trim();
+  if (!name) { toast('Enter a project name.', 'er'); return; }
+
+  const { error } = await sb.from('workplace_projects').insert({ workplace_id: S.workplace.id, name });
+  if (error) { toast(error.message || 'Could not add project.', 'er'); return; }
+
+  if (input) input.value = '';
+  await loadWorkplaceProjects();
+  await loadAdminProjects();
+  renderProjectSelect('ci-projects', getSelectedProjectNames('ci-projects'));
+  renderProjectSelect('ee-projects', getSelectedProjectNames('ee-projects'));
+  toast('Project added.', 'ok');
+}
+
+async function removeAdminProject(id, name) {
+  if (!confirm(`Remove ${name} from the project list? Existing time entries will keep their saved labels.`)) return;
+
+  const { error } = await sb.from('workplace_projects').delete().eq('id', id).eq('workplace_id', S.workplace.id);
+  if (error) { toast(error.message || 'Could not remove project.', 'er'); return; }
+
+  await loadWorkplaceProjects();
+  await loadAdminProjects();
+  renderProjectSelect('ci-projects', getSelectedProjectNames('ci-projects'));
+  renderProjectSelect('ee-projects', getSelectedProjectNames('ee-projects'));
+  toast('Project removed.', 'ok');
+}
+
+function renderEntryDetails(entry) {
+  const projects = (entry?.project_names || []).filter(Boolean);
+  const projectHtml = projects.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:${entry?.notes ? '.35rem' : '0'}">${projects.map(name => `<span style="font-size:.72rem;color:var(--accent);padding:.15rem .4rem;background:var(--bg-elevated);border-radius:999px">${escHtml(name)}</span>`).join('')}</div>`
+    : '';
+  const notesHtml = entry?.notes ? escHtml(entry.notes) : '<span style="color:var(--muted)">—</span>';
+  return `${projectHtml}<div>${notesHtml}</div>`;
+}
+
 async function loadAdminEmployees() {
   const { data: members } = await sb.from('workplace_members')
     .select('*, profile:profiles(id,full_name,role,email,planned_hours_per_week)')
     .eq('workplace_id', S.workplace.id);
-
-  const escHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
   const list = document.getElementById('adm-emp-list');
   document.getElementById('adm-emp-cnt').textContent = members?.length || 0;
@@ -3238,6 +3369,9 @@ function toast(msg, type='inf') {
    ═══════════════════════════════════════════════ */
 function fmtTime(d) {
   return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true});
+}
+function escHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 function fmtElapsed(ms) {
   const s = Math.floor(ms/1000);
