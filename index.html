@@ -703,12 +703,13 @@ tr:hover td{background:rgba(255,255,255,.015)}
               <span class="hint"><span id="adm-emp-sel-cnt">0</span> selected</span>
             </div>
             <div class="flex-center gap2" style="flex-wrap:wrap">
-              <input type="text" id="adm-emp-bulk-group" class="inp" style="width:220px" placeholder="Assign group" list="adm-emp-groups">
+              <input type="text" id="adm-emp-bulk-group" class="inp" style="width:220px" placeholder="Type new or existing group" list="adm-emp-groups">
               <datalist id="adm-emp-groups"></datalist>
-              <button class="btn btn-ghost btn-sm" id="adm-emp-apply-group" onclick="applyAdminEmployeeGroup()" disabled>Apply Group</button>
+              <button class="btn btn-ghost btn-sm" id="adm-emp-apply-group" onclick="applyAdminEmployeeGroup()" disabled>Create / Apply Group</button>
               <button class="btn btn-ghost btn-sm" id="adm-emp-clear-group" onclick="clearAdminEmployeeGroup()" disabled>Clear Group</button>
             </div>
           </div>
+          <p class="hint" style="margin:-.45rem 0 1rem">Type a new group name here to create it, or pick an existing one, then apply it to the selected employees.</p>
         <div id="adm-emp-list"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet</div></div></div>
       </div>
 
@@ -993,8 +994,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="fld"><label class="lbl">Email</label>
       <input type="email" id="ae-email" class="inp" placeholder="jane@example.com"></div>
     <div class="fld"><label class="lbl">Group (optional)</label>
-      <input type="text" id="ae-group" class="inp" placeholder="e.g., Undergrads, Full-time, Part-time" list="ae-groups">
-      <datalist id="ae-groups"></datalist></div>
+      <input type="text" id="ae-group" class="inp" placeholder="Type a new or existing group name" list="ae-groups">
+      <datalist id="ae-groups"></datalist>
+      <p class="hint">Groups are created automatically when you enter a new name, such as Undergrads or Full-time.</p></div>
     <div class="fld"><label class="lbl">Temporary Password</label>
       <input type="text" id="ae-pass" class="inp" placeholder="They can change this after signing in">
       <p class="hint">Share this with the employee so they can sign in for the first time.</p></div>
@@ -2564,7 +2566,7 @@ async function applyAdminEmployeeGroup(clearGroup = false) {
 
   const input = document.getElementById('adm-emp-bulk-group');
   const nextGroup = clearGroup ? null : (input?.value || '').trim();
-  if (!clearGroup && !nextGroup) { toast('Enter a group name first.', 'er'); return; }
+  if (!clearGroup && !nextGroup) { toast('Type a new or existing group name first.', 'er'); return; }
 
   const applyBtn = document.getElementById('adm-emp-apply-group');
   const clearBtn = document.getElementById('adm-emp-clear-group');
@@ -2584,7 +2586,7 @@ async function applyAdminEmployeeGroup(clearGroup = false) {
 
   S.adminEmployeeSelection = [];
   if (input && clearGroup) input.value = '';
-  toast(clearGroup ? 'Group cleared for selected employees.' : `Assigned ${selected.length} employee${selected.length === 1 ? '' : 's'} to ${nextGroup}.`, 'ok');
+  toast(clearGroup ? 'Group cleared for selected employees.' : `Group ${nextGroup} applied to ${selected.length} employee${selected.length === 1 ? '' : 's'}.`, 'ok');
   await loadAdminEmployees();
 }
 
