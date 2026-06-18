@@ -2990,15 +2990,30 @@ async function saveAdminEmployeeGroup(el) {
   const applyToSelected = selected.length > 0 && selected.includes(memberId);
   const targetIds = applyToSelected ? selected : [memberId];
 
-  const { error } = await sb.from('workplace_members')
+  const { data, error } = await sb.from('workplace_members')
     .update({ group: newGroup })
     .in('id', targetIds)
-    .eq('workplace_id', S.workplace.id);
+    .select('id');
 
   if (error) {
     toast(error.message || 'Failed to update group.', 'er');
     await loadAdminEmployees();
     return;
+  }
+
+  if (!data || data.length === 0) {
+    toast('Could not update group — check admin permissions.', 'er');
+    await loadAdminEmployees();
+    return;
+  }
+
+  // Update in-memory groups list so the datalist stays fresh without a full re-fetch
+  if (newGroup && !S.adminEmployeeGroups.includes(newGroup)) {
+    S.adminEmployeeGroups = [...S.adminEmployeeGroups, newGroup].sort();
+    ['adm-emp-groups', 'ae-groups'].forEach(id => {
+      const datalist = document.getElementById(id);
+      if (datalist) datalist.innerHTML = S.adminEmployeeGroups.map(g => `<option value="${escHtml(g)}"></option>`).join('');
+    });
   }
 
   if (targetIds.length > 1) {
@@ -3008,10 +3023,12 @@ async function saveAdminEmployeeGroup(el) {
         : `Group cleared for ${targetIds.length} employees.`,
       'ok'
     );
+    // Full reload needed when bulk-applying so all rows update visually
+    await loadAdminEmployees();
   } else {
     toast(newGroup ? `Group set to "${newGroup}".` : 'Group cleared.', 'ok');
+    // Single row: the contenteditable already shows the correct text, no reload needed
   }
-  await loadAdminEmployees();
 }
 
 function handleGroupKeydown(e, el) {
