@@ -2500,7 +2500,7 @@ async function loadAdminEmployees() {
 
   const rowsHtml = filtered.map(e => `<div class="emp-row" style="cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:.8rem;align-items:center" onclick='openAdminEmpHistory(${JSON.stringify(e.uid)},${JSON.stringify(e.name)},${JSON.stringify(e.email)})' title="View &amp; edit history">
     <div onclick="event.stopPropagation()">
-      <input type="checkbox" data-member-checkbox="1" ${S.adminEmployeeSelection.includes(e.memberId) ? 'checked' : ''} onchange="toggleAdminEmployeeSelection(${JSON.stringify(e.memberId)}, this.checked)">
+      <input type="checkbox" data-member-checkbox="1" ${S.adminEmployeeSelection.includes(e.memberId) ? 'checked' : ''} onclick="event.stopPropagation(); toggleAdminEmployeeSelection(${JSON.stringify(e.memberId)}, this.checked)">
     </div>
     <div>
       <div class="emp-name">${e.name}</div>
