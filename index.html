@@ -2421,12 +2421,24 @@ async function loadAdminEmployees() {
       .eq('user_id',uid).gte('clock_in',start.toISOString()).lte('clock_in',end.toISOString()).not('clock_out','is',null);
     let wh = 0;
     (entries||[]).forEach(e => wh += (new Date(e.clock_out)-new Date(e.clock_in))/3600000);
+    
+    // Check if employee is on approved leave this week
+    const startDate = start.toISOString().split('T')[0];
+    const endDate = end.toISOString().split('T')[0];
+    const { data: timeOff } = await sb.from('time_off_requests').select('start_date,end_date')
+      .eq('user_id', uid)
+      .eq('status', 'approved')
+      .eq('archived', false)
+      .lte('start_date', endDate)
+      .gte('end_date', startDate);
+    const onLeave = (timeOff || []).length > 0;
+    
     const target = Number(m.profile?.planned_hours_per_week) || S.workplace.hours_per_week || 40;
     const pct = Math.min((wh/target)*100,100);
     const name = m.profile?.full_name || 'Unknown';
     const email = m.profile?.email || '';
     const nameParts = name.split(/\s+/);
-    return { uid, name, email, wh, target, pct, role: m.role, group: m.group, firstName: nameParts[0], lastName: nameParts.slice(1).join(' ') || nameParts[0] };
+    return { uid, name, email, wh, target, pct, role: m.role, group: m.group, onLeave, firstName: nameParts[0], lastName: nameParts.slice(1).join(' ') || nameParts[0] };
   }));
 
   // Filter by group if selected
@@ -2449,7 +2461,10 @@ async function loadAdminEmployees() {
     <div>
       <div class="emp-name">${e.name}</div>
       <div class="emp-role">${e.role==='admin'?'👑 Admin':'👤 Employee'}</div>
-      ${e.group ? `<div style="font-size:.7rem;color:var(--muted);margin-top:.2rem">📁 ${e.group}</div>` : ''}
+      <div style="margin-top:.3rem;display:flex;gap:.4rem;flex-wrap:wrap">
+        ${e.group ? `<span style="font-size:.7rem;color:var(--muted);padding:.2rem .4rem;background:var(--bg-elevated);border-radius:3px">📁 ${e.group}</span>` : ''}
+        ${e.onLeave ? `<span style="font-size:.7rem;color:#f59e0b;padding:.2rem .4rem;background:rgba(245,158,11,.1);border-radius:3px;font-weight:500">✈️ On Leave</span>` : ''}
+      </div>
     </div>
     <div>
       <div class="emp-hrs-val">${e.wh.toFixed(1)}h <span style="color:var(--muted);font-size:.75rem">/ ${e.target}h</span></div>
