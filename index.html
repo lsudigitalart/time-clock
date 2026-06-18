@@ -2851,8 +2851,8 @@ async function loadAdminEmployees() {
     </td>
     <td style="font-weight:500">${e.name}</td>
     <td>${e.role==='admin'?'👑 Admin':'👤 Employee'}</td>
-    <td onclick="event.stopPropagation()" style="padding:.3rem .5rem">
-      <input class="group-edit inp" data-member-id="${e.memberId}" list="adm-emp-groups" value="${e.group ? escHtml(e.group) : ''}" placeholder="—" style="width:100%;font-size:.8rem;padding:.2rem .4rem" onblur="saveAdminEmployeeGroup(this)" onkeydown="handleGroupKeydown(event, this)">
+    <td onclick="event.stopPropagation()" style="padding:.3rem .5rem;position:relative">
+      <input class="group-edit inp" data-member-id="${e.memberId}" value="${e.group ? escHtml(e.group) : ''}" placeholder="—" autocomplete="off" style="width:100%;font-size:.8rem;padding:.2rem .4rem" onfocus="showGroupDropdown(this)" oninput="filterGroupDropdown(this)" onblur="onGroupInputBlur(this)" onkeydown="handleGroupKeydown(event, this)">
     </td>
     <td style="text-align:center">${
       e.onLeave
@@ -3049,8 +3049,66 @@ async function saveAdminEmployeeGroup(el) {
 function handleGroupKeydown(e, el) {
   if (e.key === 'Enter') {
     e.preventDefault();
+    closeGroupDropdown();
     el.blur();
   }
+  if (e.key === 'Escape') {
+    closeGroupDropdown();
+    el.blur();
+  }
+}
+
+function showGroupDropdown(input) {
+  closeGroupDropdown();
+  const groups = S.adminEmployeeGroups || [];
+  if (!groups.length) return;
+  const dropdown = document.createElement('div');
+  dropdown.id = 'group-dropdown';
+  dropdown.style.cssText = 'position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:9999;max-height:180px;overflow-y:auto;margin-top:2px';
+  dropdown.innerHTML = groups.map(g =>
+    `<div class="group-dropdown-item" style="padding:.45rem .65rem;font-size:.82rem;cursor:pointer" onmousedown="pickGroupDropdown(event, '${escHtml(g)}')">${escHtml(g)}</div>`
+  ).join('');
+  // Position relative to the input's parent td
+  input.parentNode.appendChild(dropdown);
+  // Highlight on hover
+  dropdown.querySelectorAll('.group-dropdown-item').forEach(item => {
+    item.addEventListener('mouseover', () => item.style.background = 'var(--surface2)');
+    item.addEventListener('mouseout',  () => item.style.background = '');
+  });
+}
+
+function filterGroupDropdown(input) {
+  const dropdown = document.getElementById('group-dropdown');
+  if (!dropdown) { showGroupDropdown(input); return; }
+  const q = (input.value || '').toLowerCase();
+  dropdown.querySelectorAll('.group-dropdown-item').forEach(item => {
+    item.style.display = item.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function pickGroupDropdown(e, groupName) {
+  e.preventDefault();
+  const dropdown = document.getElementById('group-dropdown');
+  if (!dropdown) return;
+  const input = dropdown.parentNode.querySelector('.group-edit');
+  if (input) {
+    input.value = groupName;
+    closeGroupDropdown();
+    saveAdminEmployeeGroup(input);
+  }
+}
+
+function closeGroupDropdown() {
+  const existing = document.getElementById('group-dropdown');
+  if (existing) existing.remove();
+}
+
+function onGroupInputBlur(input) {
+  // Small delay so pickGroupDropdown mousedown fires first
+  setTimeout(() => {
+    closeGroupDropdown();
+    saveAdminEmployeeGroup(input);
+  }, 150);
 }
 
 async function loadAdminStats() {
