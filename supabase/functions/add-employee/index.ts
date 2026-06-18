@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
       return json({ error: 'Only admins can add employees' }, 403);
     }
 
-    const { full_name, email, temp_password, role } = await req.json();
+    const { full_name, email, temp_password, role, group } = await req.json();
     if (!full_name || !email || !temp_password) {
       return json({ error: 'full_name, email, and temp_password are required' }, 400);
     }
@@ -70,11 +70,12 @@ Deno.serve(async (req) => {
       role: 'user',
     }, { onConflict: 'id' });
 
-    // Add to workplace
+    // Add to workplace (with optional group)
     const { error: memberErr } = await adminClient.from('workplace_members').insert({
       workplace_id: workplaceId,
       user_id: uid,
       role: memberRole,
+      group: group || null,
     });
     if (memberErr) return json({ error: memberErr.message }, 500);
 

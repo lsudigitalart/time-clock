@@ -681,6 +681,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <div class="card-title flex-center jb" style="margin-bottom:1rem">
           <div class="flex-center gap2"><div class="card-dot"></div> Employees</div>
           <div class="flex-center gap2">
+            <select id="adm-emp-group" class="inp" style="width:auto;height:auto;padding:.35rem .5rem;font-size:.78rem" onchange="loadAdminEmployees()">
+              <option value="">Show All Groups</option>
+            </select>
             <select id="adm-emp-sort" class="inp" style="width:auto;height:auto;padding:.35rem .5rem;font-size:.78rem" onchange="loadAdminEmployees()">
               <option value="name-asc">Sort: First Name (A-Z)</option>
               <option value="lastname-asc">Sort: Last Name (A-Z)</option>
@@ -974,6 +977,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <input type="text" id="ae-name" class="inp" placeholder="Jane Smith"></div>
     <div class="fld"><label class="lbl">Email</label>
       <input type="email" id="ae-email" class="inp" placeholder="jane@example.com"></div>
+    <div class="fld"><label class="lbl">Group (optional)</label>
+      <input type="text" id="ae-group" class="inp" placeholder="e.g., Undergrads, Full-time, Part-time" list="ae-groups">
+      <datalist id="ae-groups"></datalist></div>
     <div class="fld"><label class="lbl">Temporary Password</label>
       <input type="text" id="ae-pass" class="inp" placeholder="They can change this after signing in">
       <p class="hint">Share this with the employee so they can sign in for the first time.</p></div>
@@ -2398,6 +2404,16 @@ async function loadAdminEmployees() {
     list.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No employees yet. Share your invite link so employees can join on signup.</div></div>'; return;
   }
 
+  // Populate group dropdown
+  const allGroups = [...new Set((members || []).map(m => m.group).filter(Boolean))].sort();
+  const groupDropdown = document.getElementById('adm-emp-group');
+  if (groupDropdown) {
+    const currentValue = groupDropdown.value;
+    groupDropdown.innerHTML = '<option value="">Show All Groups</option>' + 
+      allGroups.map(g => `<option value="${g}">${g}</option>`).join('');
+    groupDropdown.value = currentValue;
+  }
+
   const { start, end } = weekRange();
   const empData = await Promise.all(members.map(async m => {
     const uid = m.profile?.id || m.user_id;
@@ -2410,24 +2426,30 @@ async function loadAdminEmployees() {
     const name = m.profile?.full_name || 'Unknown';
     const email = m.profile?.email || '';
     const nameParts = name.split(/\s+/);
-    return { uid, name, email, wh, target, pct, role: m.role, firstName: nameParts[0], lastName: nameParts.slice(1).join(' ') || nameParts[0] };
+    return { uid, name, email, wh, target, pct, role: m.role, group: m.group, firstName: nameParts[0], lastName: nameParts.slice(1).join(' ') || nameParts[0] };
   }));
 
+  // Filter by group if selected
+  const selectedGroup = document.getElementById('adm-emp-group')?.value || '';
+  const filtered = selectedGroup ? empData.filter(e => e.group === selectedGroup) : empData;
+
+  // Sort
   const sortMode = document.getElementById('adm-emp-sort')?.value || 'name-asc';
   if (sortMode === 'name-asc') {
-    empData.sort((a, b) => a.firstName.localeCompare(b.firstName));
+    filtered.sort((a, b) => a.firstName.localeCompare(b.firstName));
   } else if (sortMode === 'lastname-asc') {
-    empData.sort((a, b) => a.lastName.localeCompare(b.lastName));
+    filtered.sort((a, b) => a.lastName.localeCompare(b.lastName));
   } else if (sortMode === 'hours-desc') {
-    empData.sort((a, b) => b.wh - a.wh);
+    filtered.sort((a, b) => b.wh - a.wh);
   } else if (sortMode === 'hours-asc') {
-    empData.sort((a, b) => a.wh - b.wh);
+    filtered.sort((a, b) => a.wh - b.wh);
   }
 
-  const rowsHtml = empData.map(e => `<div class="emp-row" style="cursor:pointer" onclick="openAdminEmpHistory('${e.uid}','${e.name}','${e.email}')" title="View &amp; edit history">
+  const rowsHtml = filtered.map(e => `<div class="emp-row" style="cursor:pointer" onclick="openAdminEmpHistory('${e.uid}','${e.name}','${e.email}')" title="View &amp; edit history">
     <div>
       <div class="emp-name">${e.name}</div>
       <div class="emp-role">${e.role==='admin'?'👑 Admin':'👤 Employee'}</div>
+      ${e.group ? `<div style="font-size:.7rem;color:var(--muted);margin-top:.2rem">📁 ${e.group}</div>` : ''}
     </div>
     <div>
       <div class="emp-hrs-val">${e.wh.toFixed(1)}h <span style="color:var(--muted);font-size:.75rem">/ ${e.target}h</span></div>
@@ -2909,6 +2931,7 @@ async function submitAddEmployee() {
   const email        = document.getElementById('ae-email').value.trim();
   const temp_password = document.getElementById('ae-pass').value;
   const role         = document.getElementById('ae-role').value;
+  const group        = document.getElementById('ae-group').value.trim() || null;
 
   if (!full_name) { errEl.textContent = 'Please enter a name.'; errEl.classList.add('on'); return; }
   if (!email)     { errEl.textContent = 'Please enter an email.'; errEl.classList.add('on'); return; }
@@ -2923,7 +2946,7 @@ async function submitAddEmployee() {
   const res = await fetch(`${SB_URL}/functions/v1/add-employee`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-    body: JSON.stringify({ full_name, email, temp_password, role }),
+    body: JSON.stringify({ full_name, email, temp_password, role, group }),
   });
   const data = await res.json();
 

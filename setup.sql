@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS public.workplace_members (
   workplace_id  uuid NOT NULL REFERENCES public.workplaces(id) ON DELETE CASCADE,
   user_id       uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   role          text NOT NULL DEFAULT 'member',  -- 'member' | 'admin'
+  "group"       text,                            -- optional group/team name
   joined_at     timestamptz NOT NULL DEFAULT now(),
   UNIQUE (workplace_id, user_id)
 );
