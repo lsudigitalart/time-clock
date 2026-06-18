@@ -681,6 +681,12 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <div class="card-title flex-center jb" style="margin-bottom:1rem">
           <div class="flex-center gap2"><div class="card-dot"></div> Employees</div>
           <div class="flex-center gap2">
+            <select id="adm-emp-sort" class="inp" style="width:auto;height:auto;padding:.35rem .5rem;font-size:.78rem" onchange="loadAdminEmployees()">
+              <option value="name-asc">Sort: First Name (A-Z)</option>
+              <option value="lastname-asc">Sort: Last Name (A-Z)</option>
+              <option value="hours-desc">Sort: Hours (High→Low)</option>
+              <option value="hours-asc">Sort: Hours (Low→High)</option>
+            </select>
             <button class="btn btn-primary btn-sm" onclick="openAddEmployeeModal()">+ Add Employee</button>
             <button class="btn btn-ghost btn-sm" onclick="loadAdminPage()">↺ Refresh</button>
           </div>
@@ -2393,7 +2399,7 @@ async function loadAdminEmployees() {
   }
 
   const { start, end } = weekRange();
-  const rowsHtml = await Promise.all(members.map(async m => {
+  const empData = await Promise.all(members.map(async m => {
     const uid = m.profile?.id || m.user_id;
     const { data: entries } = await sb.from('time_entries').select('clock_in,clock_out')
       .eq('user_id',uid).gte('clock_in',start.toISOString()).lte('clock_in',end.toISOString()).not('clock_out','is',null);
@@ -2403,20 +2409,34 @@ async function loadAdminEmployees() {
     const pct = Math.min((wh/target)*100,100);
     const name = m.profile?.full_name || 'Unknown';
     const email = m.profile?.email || '';
-    return `<div class="emp-row" style="cursor:pointer" onclick="openAdminEmpHistory('${uid}','${name}','${email}')" title="View &amp; edit history">
-      <div>
-        <div class="emp-name">${name}</div>
-        <div class="emp-role">${m.role==='admin'?'👑 Admin':'👤 Employee'}</div>
-      </div>
-      <div>
-        <div class="emp-hrs-val">${wh.toFixed(1)}h <span style="color:var(--muted);font-size:.75rem">/ ${target}h</span></div>
-        <div class="prog-wrap" style="margin:.3rem 0;height:5px;width:120px">
-          <div class="prog-bar" style="width:${pct}%"></div>
-        </div>
-        <div class="emp-hrs-sub" style="font-size:.7rem">${pct.toFixed(0)}% this week &middot; <span style="color:var(--accent)">View history ›</span></div>
-      </div>
-    </div>`;
+    const nameParts = name.split(/\s+/);
+    return { uid, name, email, wh, target, pct, role: m.role, firstName: nameParts[0], lastName: nameParts.slice(1).join(' ') || nameParts[0] };
   }));
+
+  const sortMode = document.getElementById('adm-emp-sort')?.value || 'name-asc';
+  if (sortMode === 'name-asc') {
+    empData.sort((a, b) => a.firstName.localeCompare(b.firstName));
+  } else if (sortMode === 'lastname-asc') {
+    empData.sort((a, b) => a.lastName.localeCompare(b.lastName));
+  } else if (sortMode === 'hours-desc') {
+    empData.sort((a, b) => b.wh - a.wh);
+  } else if (sortMode === 'hours-asc') {
+    empData.sort((a, b) => a.wh - b.wh);
+  }
+
+  const rowsHtml = empData.map(e => `<div class="emp-row" style="cursor:pointer" onclick="openAdminEmpHistory('${e.uid}','${e.name}','${e.email}')" title="View &amp; edit history">
+    <div>
+      <div class="emp-name">${e.name}</div>
+      <div class="emp-role">${e.role==='admin'?'👑 Admin':'👤 Employee'}</div>
+    </div>
+    <div>
+      <div class="emp-hrs-val">${e.wh.toFixed(1)}h <span style="color:var(--muted);font-size:.75rem">/ ${e.target}h</span></div>
+      <div class="prog-wrap" style="margin:.3rem 0;height:5px;width:120px">
+        <div class="prog-bar" style="width:${e.pct}%"></div>
+      </div>
+      <div class="emp-hrs-sub" style="font-size:.7rem">${e.pct.toFixed(0)}% this week &middot; <span style="color:var(--accent)">View history ›</span></div>
+    </div>
+  </div>`);
   list.innerHTML = rowsHtml.join('');
 }
 
