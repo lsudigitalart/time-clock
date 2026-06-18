@@ -2727,25 +2727,36 @@ async function loadAdminEmployees() {
   });
 
   const { start, end } = weekRange();
+
+  // Fetch all approved non-archived leave for this workplace in one query
+  const startDate = start.toISOString().split('T')[0];
+  const endDate   = end.toISOString().split('T')[0];
+  const now = new Date();
+  const todayDate = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+  const { data: allLeave } = await sb.from('time_off_requests')
+    .select('user_id,start_date,end_date')
+    .eq('workplace_id', S.workplace.id)
+    .eq('status', 'approved')
+    .neq('archived', true)
+    .lte('start_date', endDate)
+    .gte('end_date', startDate);
+
+  // Index leave rows by user_id for O(1) lookup per employee
+  const leaveByUser = {};
+  for (const t of (allLeave || [])) {
+    if (!leaveByUser[t.user_id]) leaveByUser[t.user_id] = [];
+    leaveByUser[t.user_id].push(t);
+  }
+
   const empData = await Promise.all(members.map(async m => {
     const uid = m.profile?.id || m.user_id;
     const { data: entries } = await sb.from('time_entries').select('clock_in,clock_out')
       .eq('user_id',uid).gte('clock_in',start.toISOString()).lte('clock_in',end.toISOString()).not('clock_out','is',null);
     let wh = 0;
     (entries||[]).forEach(e => wh += (new Date(e.clock_out)-new Date(e.clock_in))/3600000);
-    
-    // Track both leave right now and leave overlap during this week.
-    const startDate = start.toISOString().split('T')[0];
-    const endDate = end.toISOString().split('T')[0];
-    const now = new Date();
-    const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const { data: timeOff } = await sb.from('time_off_requests').select('start_date,end_date')
-      .eq('user_id', uid)
-      .eq('status', 'approved')
-      .eq('archived', false)
-      .lte('start_date', endDate)
-      .gte('end_date', startDate);
-    const leaveRows = timeOff || [];
+
+    const leaveRows = leaveByUser[uid] || [];
     const onLeaveThisWeek = leaveRows.length > 0;
     const onLeaveNow = leaveRows.some(t => t.start_date <= todayDate && t.end_date >= todayDate);
     const onLeave = onLeaveNow || onLeaveThisWeek;
