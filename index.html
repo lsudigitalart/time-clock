@@ -717,7 +717,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <table id="adm-emp-list">
             <thead>
               <tr>
-                <th style="width:32px"></th>
+                <th style="width:32px"><input type="checkbox" id="adm-emp-select-all" title="Select / deselect all" onchange="toggleAdminEmployeeSelectionAll(this.checked)"></th>
                 <th style="cursor:pointer;user-select:none;text-align:left" onclick="toggleAdminEmpSort('name')">Name <span id="adm-sort-name"></span></th>
                 <th style="cursor:pointer;user-select:none;text-align:left" onclick="toggleAdminEmpSort('role')">Role <span id="adm-sort-role"></span></th>
                 <th style="cursor:pointer;user-select:none;text-align:left;position:relative" onclick="toggleAdminEmpSort('group')">Group <span id="adm-sort-group"></span> <button class="btn btn-ghost" style="padding:0;width:20px;height:20px;font-size:.95rem;margin-left:.3rem;vertical-align:middle" onclick="event.stopPropagation(); openGroupFilter()" title="Filter by group">🔍</button></th>
@@ -2975,7 +2975,14 @@ function closeLeaveFilter() {
 }
 
 function syncAdminEmployeeSelectionUi() {
-  // Just update the selection count if needed, but no longer manage bulk group buttons
+  const selected = S.adminEmployeeSelection || [];
+  const visible  = S.adminEmployeeVisibleIds || [];
+  const visibleSelected = visible.filter(id => selected.includes(id)).length;
+  const el = document.getElementById('adm-emp-select-all');
+  if (el) {
+    el.checked       = visible.length > 0 && visibleSelected === visible.length;
+    el.indeterminate = visibleSelected > 0 && visibleSelected < visible.length;
+  }
 }
 
 function toggleAdminEmployeeSelection(memberId, checked, event) {
