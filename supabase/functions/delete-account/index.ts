@@ -30,33 +30,55 @@ Deno.serve(async (req) => {
     const targetId = target_user_id || caller.id;
     const isSelf = targetId === caller.id;
 
-    // If deleting someone else, caller must be admin of the same workplace
-    if (!isSelf) {
-      const { data: callerMembership } = await userClient
-        .from('workplace_members')
-        .select('role, workplace_id')
-        .eq('user_id', caller.id)
-        .eq('role', 'admin')
-        .maybeSingle();
+    const adminClient = createClient(supabaseUrl, serviceKey);
 
-      if (!callerMembership) {
+    // If deleting someone else, caller must be an admin/owner of at least one
+    // workplace that also contains the target user.
+    if (!isSelf) {
+      const [callerOwned, callerAdminMemberships] = await Promise.all([
+        adminClient
+          .from('workplaces')
+          .select('id')
+          .eq('admin_id', caller.id),
+        adminClient
+          .from('workplace_members')
+          .select('workplace_id')
+          .eq('user_id', caller.id)
+          .eq('role', 'admin'),
+      ]);
+
+      const callerAdminWorkplaceIds = new Set<string>([
+        ...((callerOwned.data || []).map((w: { id: string }) => w.id)),
+        ...((callerAdminMemberships.data || []).map((m: { workplace_id: string }) => m.workplace_id)),
+      ]);
+
+      if (!callerAdminWorkplaceIds.size) {
         return json({ error: 'Only admins can delete other accounts' }, 403);
       }
 
-      // Confirm target is in same workplace
-      const { data: targetMembership } = await userClient
-        .from('workplace_members')
-        .select('workplace_id')
-        .eq('user_id', targetId)
-        .maybeSingle();
+      const [targetOwned, targetMemberships] = await Promise.all([
+        adminClient
+          .from('workplaces')
+          .select('id')
+          .eq('admin_id', targetId),
+        adminClient
+          .from('workplace_members')
+          .select('workplace_id')
+          .eq('user_id', targetId),
+      ]);
 
-      if (targetMembership?.workplace_id !== callerMembership?.workplace_id) {
+      const targetWorkplaceIds = new Set<string>([
+        ...((targetOwned.data || []).map((w: { id: string }) => w.id)),
+        ...((targetMemberships.data || []).map((m: { workplace_id: string }) => m.workplace_id)),
+      ]);
+
+      const sameWorkplace = [...targetWorkplaceIds].some((wid) => callerAdminWorkplaceIds.has(wid));
+      if (!sameWorkplace) {
         return json({ error: 'Target user is not in your workplace' }, 403);
       }
     }
 
     // Use service role client to delete the auth user (cascades to all DB rows)
-    const adminClient = createClient(supabaseUrl, serviceKey);
     const { error: deleteErr } = await adminClient.auth.admin.deleteUser(targetId);
     if (deleteErr) return json({ error: deleteErr.message }, 500);
 
