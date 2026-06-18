@@ -1150,6 +1150,7 @@ const S = {
   adminEmployeeGroups: [],
   adminEmpSortCol: 'name',   // which column to sort by
   adminEmpSortDir: 'asc',    // 'asc' or 'desc'
+  adminEmpLastChecked: null, // for shift-click range selection
   adminEmpFilterGroups: null, // null = show all, [] or ['group1'] = filter
   adminEmpFilterLeave: null,  // null = show all, 'on' = only has leave now/this week, 'off' = only no leave now/this week
   workplaceProjects: [],
@@ -2847,7 +2848,7 @@ async function loadAdminEmployees() {
 
   const rowsHtml = filtered.map(e => `<tr style="cursor:pointer" onclick='openAdminEmpHistory(${JSON.stringify(e.uid)},${JSON.stringify(e.name)},${JSON.stringify(e.email)})' title="View history">
     <td onclick="event.stopPropagation()">
-      <input type="checkbox" data-member-checkbox="1" ${S.adminEmployeeSelection.includes(e.memberId) ? 'checked' : ''} onclick="event.stopPropagation()" onchange='toggleAdminEmployeeSelection(${JSON.stringify(e.memberId)}, this.checked)'>
+      <input type="checkbox" data-member-checkbox="1" ${S.adminEmployeeSelection.includes(e.memberId) ? 'checked' : ''} onclick="event.stopPropagation()" onchange='toggleAdminEmployeeSelection(${JSON.stringify(e.memberId)}, this.checked, event)'>
     </td>
     <td style="font-weight:500">${e.name}</td>
     <td>${e.role==='admin'?'👑 Admin':'👤 Employee'}</td>
@@ -2977,10 +2978,29 @@ function syncAdminEmployeeSelectionUi() {
   // Just update the selection count if needed, but no longer manage bulk group buttons
 }
 
-function toggleAdminEmployeeSelection(memberId, checked) {
+function toggleAdminEmployeeSelection(memberId, checked, event) {
+  const visible = S.adminEmployeeVisibleIds || [];
   const selected = new Set(S.adminEmployeeSelection || []);
-  if (checked) selected.add(memberId);
-  else selected.delete(memberId);
+
+  if (event?.shiftKey && S.adminEmpLastChecked != null && visible.includes(S.adminEmpLastChecked)) {
+    // Range select: select all between last checked and current
+    const fromIdx = visible.indexOf(S.adminEmpLastChecked);
+    const toIdx   = visible.indexOf(memberId);
+    const lo = Math.min(fromIdx, toIdx);
+    const hi = Math.max(fromIdx, toIdx);
+    visible.slice(lo, hi + 1).forEach(id => checked ? selected.add(id) : selected.delete(id));
+    // Sync checkbox elements in the DOM
+    document.querySelectorAll('#adm-emp-list input[data-member-checkbox="1"]').forEach(el => {
+      const row = el.closest('tr');
+      const idx = [...el.closest('tbody').children].indexOf(row);
+      if (idx >= lo && idx <= hi) el.checked = checked;
+    });
+  } else {
+    if (checked) selected.add(memberId);
+    else selected.delete(memberId);
+  }
+
+  if (checked) S.adminEmpLastChecked = memberId;
   S.adminEmployeeSelection = [...selected];
   syncAdminEmployeeSelectionUi();
 }
