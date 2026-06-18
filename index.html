@@ -2746,7 +2746,8 @@ async function loadAdminEmployees() {
     const onLeave = onLeaveNow || onLeaveThisWeek;
     
     const target = Number(m.profile?.planned_hours_per_week) || S.workplace.hours_per_week || 40;
-    const pct = Math.min((wh/target)*100,100);
+    const pctRaw = target > 0 ? (wh / target) * 100 : 0;
+    const pct = Math.min(pctRaw, 100);
     const name = m.profile?.full_name || 'Unknown';
     const email = m.profile?.email || '';
     const nameParts = name.split(/\s+/);
@@ -2758,6 +2759,7 @@ async function loadAdminEmployees() {
       wh,
       target,
       pct,
+      pctRaw,
       role: m.role,
       group: m.group,
       onLeave,
@@ -2796,7 +2798,7 @@ async function loadAdminEmployees() {
   } else if (S.adminEmpSortCol === 'hours') {
     filtered.sort((a, b) => a.wh - b.wh);
   } else if (S.adminEmpSortCol === 'progress') {
-    filtered.sort((a, b) => a.pct - b.pct);
+    filtered.sort((a, b) => a.pctRaw - b.pctRaw);
   } else if (S.adminEmpSortCol === 'group') {
     filtered.sort((a, b) => (a.group || '').localeCompare(b.group || ''));
   } else if (S.adminEmpSortCol === 'leave') {
@@ -2857,7 +2859,8 @@ function toggleAdminEmpSort(col) {
     S.adminEmpSortDir = S.adminEmpSortDir === 'asc' ? 'desc' : 'asc';
   } else {
     S.adminEmpSortCol = col;
-    S.adminEmpSortDir = 'asc';
+    // Hours and progress default to descending (highest first) on first click
+    S.adminEmpSortDir = (col === 'hours' || col === 'progress') ? 'desc' : 'asc';
   }
   loadAdminEmployees();
 }
