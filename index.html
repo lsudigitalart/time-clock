@@ -242,7 +242,8 @@ tr:hover td{background:rgba(255,255,255,.015)}
 
 /* ─── MODAL ──────────────────────────────────────────────── */
 #overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);
-  display:none;align-items:center;justify-content:center;z-index:1000;padding:1rem}
+  display:none;align-items:flex-start;justify-content:center;z-index:1000;padding:1.5rem 1rem;
+  overflow-y:auto}
 #overlay.on{display:flex}
 .modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r-lg);
   padding:2rem;width:100%;max-width:480px;position:relative;
