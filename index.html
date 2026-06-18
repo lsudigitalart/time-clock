@@ -736,7 +736,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <div class="flex-center gap2"><div class="card-dot"></div> Projects</div>
         </div>
         <div class="flex-center gap2" style="align-items:flex-start;flex-wrap:wrap;margin-bottom:.8rem">
-          <input type="text" id="adm-project-name" class="inp" style="flex:1;min-width:220px" placeholder="Add a project name">
+          <input type="text" id="adm-project-name" class="inp" style="flex:1;min-width:220px" placeholder="Add project name(s), separated by commas">
           <button class="btn btn-primary btn-sm" onclick="addAdminProject()">+ Add Project</button>
         </div>
         <p class="hint" style="margin:0 0 .9rem">These projects appear in the shift form so employees can tag the work they did. Users can select more than one.</p>
@@ -2640,10 +2640,31 @@ async function loadAdminProjects() {
 
 async function addAdminProject() {
   const input = document.getElementById('adm-project-name');
-  const name = (input?.value || '').trim();
-  if (!name) { toast('Enter a project name.', 'er'); return; }
+  const raw = (input?.value || '').trim();
+  if (!raw) { toast('Enter at least one project name.', 'er'); return; }
 
-  const { error } = await sb.from('workplace_projects').insert({ workplace_id: S.workplace.id, name });
+  if (!S.workplaceProjectsReady) await loadWorkplaceProjects();
+
+  const existing = new Set((S.workplaceProjects || []).map(p => (p.name || '').trim().toLowerCase()));
+  const seen = new Set();
+  const names = raw
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .filter(name => {
+      const key = name.toLowerCase();
+      if (existing.has(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  if (!names.length) {
+    toast('All entered project names already exist or were empty.', 'er');
+    return;
+  }
+
+  const rows = names.map(name => ({ workplace_id: S.workplace.id, name }));
+  const { error } = await sb.from('workplace_projects').insert(rows);
   if (error) { toast(error.message || 'Could not add project.', 'er'); return; }
 
   if (input) input.value = '';
@@ -2651,7 +2672,7 @@ async function addAdminProject() {
   await loadAdminProjects();
   renderProjectSelect('ci-projects', getSelectedProjectNames('ci-projects'));
   renderProjectSelect('ee-projects', getSelectedProjectNames('ee-projects'));
-  toast('Project added.', 'ok');
+  toast(`Added ${names.length} project${names.length === 1 ? '' : 's'}.`, 'ok');
 }
 
 async function removeAdminProject(id, name) {
