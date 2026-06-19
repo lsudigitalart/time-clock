@@ -3101,12 +3101,19 @@ async function saveAdminEmployeeTargetHours(el) {
     return;
   }
 
-  const { error } = await sb.from('profiles')
+  const { data, error } = await sb.from('profiles')
     .update({ planned_hours_per_week: newTarget })
-    .eq('id', userId);
+    .eq('id', userId)
+    .select('id');
 
   if (error) {
     toast(error.message || 'Failed to update target hours.', 'er');
+    await loadAdminEmployees();
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    toast('Could not update target hours — check admin permissions.', 'er');
     await loadAdminEmployees();
     return;
   }
