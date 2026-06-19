@@ -2851,11 +2851,11 @@ async function loadAdminEmployees() {
     return;
   }
 
-  const rowsHtml = filtered.map(e => `<tr style="cursor:pointer" onclick='openAdminEmpHistory(${JSON.stringify(e.uid)},${JSON.stringify(e.name)},${JSON.stringify(e.email)})' title="View history">
+  const rowsHtml = filtered.map(e => `<tr>
     <td onclick="event.stopPropagation()">
       <input type="checkbox" data-member-checkbox="1" ${S.adminEmployeeSelection.includes(e.memberId) ? 'checked' : ''} onclick="event.stopPropagation()" onchange='toggleAdminEmployeeSelection(${JSON.stringify(e.memberId)}, this.checked, event)'>
     </td>
-    <td style="font-weight:500">${e.name}</td>
+    <td style="font-weight:500;cursor:pointer" onclick='openAdminEmpHistory(${JSON.stringify(e.uid)},${JSON.stringify(e.name)},${JSON.stringify(e.email)})' title="View history">${e.name}</td>
     <td>${e.role==='admin'?'👑 Admin':'👤 Employee'}</td>
     <td onclick="event.stopPropagation()" style="padding:.3rem .5rem;position:relative">
       <input class="group-edit inp" data-member-id="${e.memberId}" value="${e.group ? escHtml(e.group) : ''}" placeholder="—" autocomplete="off" style="width:100%;font-size:.8rem;padding:.2rem .4rem" onfocus="showGroupDropdown(this)" oninput="filterGroupDropdown(this)" onblur="onGroupInputBlur(this)" onkeydown="handleGroupKeydown(event, this)">
