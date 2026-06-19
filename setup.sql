@@ -296,10 +296,37 @@ CREATE POLICY "time_off: read own or workplace admin"
     )
   );
 
-CREATE POLICY "time_off: insert own"
+CREATE POLICY "time_off: insert own or workplace admin"
   ON public.time_off_requests FOR INSERT
   TO authenticated
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (
+    (
+      auth.uid() = user_id
+      AND (
+        EXISTS (
+          SELECT 1
+          FROM public.workplaces w
+          WHERE w.id = public.time_off_requests.workplace_id
+            AND w.admin_id = auth.uid()
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM public.workplace_members m
+          WHERE m.workplace_id = public.time_off_requests.workplace_id
+            AND m.user_id = auth.uid()
+        )
+      )
+    )
+    OR (
+      is_workplace_admin(workplace_id)
+      AND EXISTS (
+        SELECT 1
+        FROM public.workplace_members m
+        WHERE m.workplace_id = public.time_off_requests.workplace_id
+          AND m.user_id = public.time_off_requests.user_id
+      )
+    )
+  );
 
 -- Admins can update status (approve/deny); users can update their own pending requests.
 CREATE POLICY "time_off: update own pending or admin"
