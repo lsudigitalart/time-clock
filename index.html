@@ -2904,13 +2904,13 @@ function openGroupFilter() {
   const popup = document.createElement('div');
   popup.id = 'group-filter-popup';
   popup.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:300px';
-  popup.innerHTML = html + '<button class="btn btn-primary btn-sm" style="width:100%;margin-top:.75rem" onclick="closeGroupFilter()">Done</button>';
+  popup.innerHTML = html + '<button class="btn btn-primary btn-sm" style="width:100%;margin-top:.75rem" onclick="applyGroupFilterAndClose()">Done</button>';
   document.body.appendChild(popup);
   
   // Close on outside click
   document.addEventListener('click', e => {
     if (!popup.contains(e.target) && e.target.textContent !== '🔍') {
-      closeGroupFilter();
+      applyGroupFilterAndClose();
     }
   }, { once: true });
 }
@@ -2926,6 +2926,11 @@ function setGroupFilter(group, checked) {
 
 function clearGroupFilter() {
   S.adminEmpFilterGroups = null;
+  loadAdminEmployees();
+  closeGroupFilter();
+}
+
+function applyGroupFilterAndClose() {
   loadAdminEmployees();
   closeGroupFilter();
 }
