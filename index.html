@@ -1462,13 +1462,18 @@ async function onLogin(user) {
 }
 
 async function loadWorkplace() {
-  const { data } = await sb.from('workplace_members')
-    .select('*, workplace:workplaces(*)')
-    .eq('user_id', S.user.id).limit(1).maybeSingle();
-  if (data?.workplace) {
-    S.workplace = data.workplace;
-    S.memberRole = data.role;  // 'admin' or 'member'
-    document.getElementById('nav-wp-name').textContent = data.workplace.name;
+  const { data: memberships } = await sb.from('workplace_members')
+    .select('role, workplace:workplaces(*)')
+    .eq('user_id', S.user.id);
+
+  // Prefer an admin-access workplace when a user belongs to multiple workplaces.
+  const selected = (memberships || []).find(m => m.role === 'admin' || m.workplace?.admin_id === S.user.id)
+    || (memberships || [])[0];
+
+  if (selected?.workplace) {
+    S.workplace = selected.workplace;
+    S.memberRole = (selected.role === 'admin' || selected.workplace.admin_id === S.user.id) ? 'admin' : 'member';
+    document.getElementById('nav-wp-name').textContent = selected.workplace.name;
   } else {
     S.workplace = null;
     S.memberRole = null;
