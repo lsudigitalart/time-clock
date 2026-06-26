@@ -14,7 +14,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS public.profiles (
   id            uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name     text,
-  role          text NOT NULL DEFAULT 'user',   -- 'user' | 'admin'
+  role          text NOT NULL DEFAULT 'user',   -- 'user' | 'admin' | 'superadmin'
   email         text,
   planned_hours_per_week numeric,
   created_at    timestamptz NOT NULL DEFAULT now()
@@ -118,7 +118,13 @@ BEGIN
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'user'),
+    -- Only allow self-serve roles at signup; 'superadmin' must be granted
+    -- manually (see guard_profile_role below).
+    CASE
+      WHEN COALESCE(NEW.raw_user_meta_data->>'role', 'user') IN ('user', 'admin')
+        THEN NEW.raw_user_meta_data->>'role'
+      ELSE 'user'
+    END,
     NEW.email
   )
   ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
@@ -130,6 +136,47 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+
+-- Privilege-escalation guard: only an existing superadmin (or a direct
+-- service-role / SQL session where auth.uid() is NULL) may grant the
+-- 'superadmin' role. Prevents users self-promoting via "profiles: update own".
+CREATE OR REPLACE FUNCTION public.guard_profile_role()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  caller_is_super boolean;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN NEW;                       -- direct SQL / service role
+  END IF;
+
+  caller_is_super := EXISTS (
+    SELECT 1 FROM public.profiles p
+    WHERE p.id = auth.uid() AND p.role = 'superadmin'
+  );
+
+  IF caller_is_super THEN
+    RETURN NEW;                       -- superadmins may change roles
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.role = 'superadmin' THEN
+      NEW.role := 'user';
+    END IF;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF NEW.role IS DISTINCT FROM OLD.role THEN
+      NEW.role := OLD.role;           -- non-superadmins cannot change role
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS guard_profile_role_trg ON public.profiles;
+CREATE TRIGGER guard_profile_role_trg
+  BEFORE INSERT OR UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.guard_profile_role();
 
 
 -- ── 4. ROW LEVEL SECURITY ─────────────────────────────────────
@@ -164,10 +211,20 @@ CREATE POLICY "profiles: update own"
 -- ── workplaces ────────────────────────────────────────────────
 -- Allow anon SELECT so the sign-up page can list workplaces.
 
--- Helper: true if current user is the owner OR a co-admin member of a workplace
-CREATE OR REPLACE FUNCTION is_workplace_admin(wid uuid)
+-- Helper: true if current user is a global superadmin
+CREATE OR REPLACE FUNCTION is_superadmin()
 RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
   SELECT EXISTS (
+    SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'superadmin'
+  );
+$$;
+
+-- Helper: true if current user is the owner OR a co-admin member of a workplace
+-- (superadmins inherit admin rights on every workplace)
+CREATE OR REPLACE FUNCTION is_workplace_admin(wid uuid)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  SELECT is_superadmin()
+  OR EXISTS (
     SELECT 1 FROM workplaces w WHERE w.id = wid AND w.admin_id = auth.uid()
   ) OR EXISTS (
     SELECT 1 FROM workplace_members m
@@ -177,7 +234,8 @@ $$;
 
 CREATE OR REPLACE FUNCTION is_workplace_member(wid uuid)
 RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
-  SELECT EXISTS (
+  SELECT is_superadmin()
+  OR EXISTS (
     SELECT 1 FROM workplaces w WHERE w.id = wid AND w.admin_id = auth.uid()
   ) OR EXISTS (
     SELECT 1 FROM workplace_members m
@@ -192,12 +250,17 @@ CREATE POLICY "workplaces: read all"
 CREATE POLICY "workplaces: insert (authenticated)"
   ON public.workplaces FOR INSERT
   TO authenticated
-  WITH CHECK (auth.uid() = admin_id);
+  WITH CHECK (auth.uid() = admin_id OR is_superadmin());
 
 CREATE POLICY "workplaces: update by admin"
   ON public.workplaces FOR UPDATE
   TO authenticated
-  USING (auth.uid() = admin_id);
+  USING (auth.uid() = admin_id OR is_superadmin());
+
+CREATE POLICY "workplaces: delete by superadmin"
+  ON public.workplaces FOR DELETE
+  TO authenticated
+  USING (is_superadmin());
 
 
 -- ── workplace_members ─────────────────────────────────────────

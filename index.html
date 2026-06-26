@@ -478,6 +478,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button class="nav-btn"    onclick="goto('schedule')"  data-p="schedule">Schedule</button>
       <button class="nav-btn"    onclick="goto('timeoff')"   data-p="timeoff">Time Off</button>
       <button class="nav-btn hidden" onclick="goto('admin')" data-p="admin" id="nav-admin">Admin</button>
+      <button class="nav-btn hidden" onclick="goto('superadmin')" data-p="superadmin" id="nav-superadmin">Superadmin</button>
     </div>
     <div class="nav-right">
       <div class="nav-wp" id="nav-wp-name"></div>
@@ -814,6 +815,61 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <div id="sheets-status" style="margin-top:.6rem;font-size:.8rem;color:var(--text2)"></div>
       </div>
     </div>
+
+    <!-- ─── SUPERADMIN ─────────────────────────────────────── -->
+    <div id="page-superadmin" class="page">
+      <div class="ph">
+        <div><div class="ph-title">Superadmin</div><div class="ph-sub">Manage every workplace and move members across workplaces.</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="loadSuperadminPage()">↺ Refresh</button>
+      </div>
+
+      <div class="card sec">
+        <div class="card-title flex-center jb" style="margin-bottom:1rem">
+          <div class="flex-center gap2"><div class="card-dot"></div> Workplaces</div>
+          <button class="btn btn-primary btn-sm" onclick="openSaWpModal()">+ New Workplace</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align:left">Name</th>
+                <th style="text-align:left">Owner</th>
+                <th style="text-align:center">Members</th>
+                <th style="text-align:right">Hours/Week</th>
+                <th style="width:140px;text-align:center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tb-sa-wp"><tr><td colspan="5"><div class="empty"><div class="empty-icon">🏢</div><div class="empty-txt">No workplaces</div></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card sec">
+        <div class="card-title flex-center jb" style="margin-bottom:1rem">
+          <div class="flex-center gap2"><div class="card-dot"></div> Members</div>
+          <div class="flex-center gap2">
+            <label class="lbl" style="margin:0">Workplace</label>
+            <select id="sa-member-filter" class="inp" style="width:auto" onchange="renderSaMembers()">
+              <option value="">All</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint" style="margin:0 0 .9rem">Move a member to another workplace. Their time history stays attached to the original workplace.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align:left">Name</th>
+                <th style="text-align:left">Role</th>
+                <th style="text-align:left">Workplace</th>
+                <th style="width:110px;text-align:center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="tb-sa-members"><tr><td colspan="4"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No members</div></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -1119,6 +1175,39 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button class="btn btn-primary" onclick="saveWorkplace()">Save</button>
     </div>
   </div>
+
+  <!-- Superadmin: create / edit workplace -->
+  <div class="modal hidden" id="m-sa-wp">
+    <button class="m-close" onclick="closeModal()">✕</button>
+    <div class="m-title" id="sa-wp-title">🏢 New Workplace</div>
+    <div class="fld"><label class="lbl">Workplace Name</label>
+      <input type="text" id="sa-wp-name" class="inp"></div>
+    <div class="fld"><label class="lbl">Work Address</label>
+      <input type="text" id="sa-wp-address" class="inp" placeholder="123 Main St, Baton Rouge, LA"></div>
+    <div class="g2">
+      <div class="fld"><label class="lbl">Hours / Week</label>
+        <input type="number" id="sa-wp-hours" class="inp" min="1" max="168" placeholder="40"></div>
+      <div class="fld"><label class="lbl">Clock-In Radius (m)</label>
+        <input type="number" id="sa-wp-radius" class="inp" min="25" max="2000" step="5" placeholder="150"></div>
+    </div>
+    <div class="m-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="sa-wp-save" onclick="saveSaWorkplace()">Save</button>
+    </div>
+  </div>
+
+  <!-- Superadmin: move member to another workplace -->
+  <div class="modal hidden" id="m-sa-move">
+    <button class="m-close" onclick="closeModal()">✕</button>
+    <div class="m-title">↔ Move Member</div>
+    <p class="hint" id="sa-move-lbl" style="margin-bottom:1rem"></p>
+    <div class="fld"><label class="lbl">Destination Workplace</label>
+      <select id="sa-move-target" class="inp"></select></div>
+    <div class="m-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSaMove()">Move</button>
+    </div>
+  </div>
 </div>
 
 <div id="toasts"></div>
@@ -1160,7 +1249,7 @@ const S = {
   adminCalendarOverflow: {},
 };
 
-const APP_PAGES = ['dashboard', 'history', 'schedule', 'timeoff', 'admin'];
+const APP_PAGES = ['dashboard', 'history', 'schedule', 'timeoff', 'admin', 'superadmin'];
 
 /* ═══════════════════════════════════════════════
    INIT
@@ -1240,6 +1329,7 @@ function showPasswordUpdateForm() {
   document.getElementById('auth-wrap').style.display = 'flex';
   document.getElementById('app-wrap').classList.remove('on');
   document.getElementById('nav-admin').classList.add('hidden');
+  document.getElementById('nav-superadmin').classList.add('hidden');
   authTab('update');
 }
 
@@ -1456,6 +1546,7 @@ async function onLogin(user) {
   document.getElementById('nav-username').textContent = prof?.full_name || user.email || 'Account';
 
   if (prof?.role === 'admin' || S.memberRole === 'admin') document.getElementById('nav-admin').classList.remove('hidden');
+  if (prof?.role === 'superadmin') document.getElementById('nav-superadmin').classList.remove('hidden');
 
   await loadDashboard();
   goto(getPageFromHash(), false);
@@ -1487,6 +1578,7 @@ function onLogout() {
   document.getElementById('auth-wrap').style.display = 'flex';
   document.getElementById('app-wrap').classList.remove('on');
   document.getElementById('nav-admin').classList.add('hidden');
+  document.getElementById('nav-superadmin').classList.add('hidden');
   document.getElementById('app-wrap').querySelector('.page.on')?.classList.remove('on');
   document.getElementById('page-dashboard').classList.add('on');
   document.querySelectorAll('.nav-btn').forEach((b,i)=> b.classList.toggle('on', i===0));
@@ -3477,6 +3569,183 @@ async function saveWorkplace() {
   closeModal(); toast('Workplace updated!','ok');
 }
 
+/* ═══════════════════════════════════════════════
+   SUPERADMIN
+   ═══════════════════════════════════════════════ */
+async function loadSuperadminPage() {
+  if (S.profile?.role !== 'superadmin') return;
+
+  const [{ data: wps }, { data: members }] = await Promise.all([
+    sb.from('workplaces').select('*').order('name'),
+    sb.from('workplace_members').select('id, role, workplace_id, user_id, profile:profiles(full_name, email)'),
+  ]);
+
+  S.saWorkplaces = wps || [];
+  S.saMembers = members || [];
+
+  const counts = {};
+  S.saMembers.forEach(m => { counts[m.workplace_id] = (counts[m.workplace_id] || 0) + 1; });
+  S.saWorkplaceCounts = counts;
+
+  const ownerIds = [...new Set(S.saWorkplaces.map(w => w.admin_id).filter(Boolean))];
+  const owners = {};
+  if (ownerIds.length) {
+    const { data: profs } = await sb.from('profiles').select('id, full_name, email').in('id', ownerIds);
+    (profs || []).forEach(p => { owners[p.id] = p.full_name || p.email || '—'; });
+  }
+  S.saOwners = owners;
+
+  renderSaWorkplaces();
+  populateSaWorkplaceSelects();
+  renderSaMembers();
+}
+
+function renderSaWorkplaces() {
+  const tb = document.getElementById('tb-sa-wp');
+  const wps = S.saWorkplaces || [];
+  if (!wps.length) {
+    tb.innerHTML = `<tr><td colspan="5"><div class="empty"><div class="empty-icon">🏢</div><div class="empty-txt">No workplaces</div></div></td></tr>`;
+    return;
+  }
+  tb.innerHTML = wps.map(w => `
+    <tr>
+      <td>${escHtml(w.name)}</td>
+      <td>${escHtml(S.saOwners?.[w.admin_id] || '—')}</td>
+      <td style="text-align:center">${S.saWorkplaceCounts?.[w.id] || 0}</td>
+      <td style="text-align:right">${Number(w.hours_per_week) || 40}</td>
+      <td style="text-align:center">
+        <button class="btn btn-ghost btn-sm" onclick="openSaWpModal('${w.id}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteSaWorkplace('${w.id}')">Delete</button>
+      </td>
+    </tr>`).join('');
+}
+
+function populateSaWorkplaceSelects() {
+  const filter = document.getElementById('sa-member-filter');
+  const current = filter.value;
+  filter.innerHTML = '<option value="">All</option>' +
+    (S.saWorkplaces || []).map(w => `<option value="${w.id}">${escHtml(w.name)}</option>`).join('');
+  filter.value = current;
+}
+
+function renderSaMembers() {
+  const tb = document.getElementById('tb-sa-members');
+  const filter = document.getElementById('sa-member-filter').value;
+  const wpName = {};
+  (S.saWorkplaces || []).forEach(w => { wpName[w.id] = w.name; });
+  let rows = (S.saMembers || []).slice();
+  if (filter) rows = rows.filter(m => m.workplace_id === filter);
+  if (!rows.length) {
+    tb.innerHTML = `<tr><td colspan="4"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No members</div></div></td></tr>`;
+    return;
+  }
+  rows.sort((a, b) => (a.profile?.full_name || '').localeCompare(b.profile?.full_name || ''));
+  tb.innerHTML = rows.map(m => `
+    <tr>
+      <td>${escHtml(m.profile?.full_name || m.profile?.email || 'Member')}</td>
+      <td>${m.role === 'admin' ? '👑 Admin' : '👤 Member'}</td>
+      <td>${escHtml(wpName[m.workplace_id] || '—')}</td>
+      <td style="text-align:center"><button class="btn btn-ghost btn-sm" onclick="openSaMoveModal('${m.id}')">Move</button></td>
+    </tr>`).join('');
+}
+
+function openSaWpModal(id) {
+  const wp = id ? (S.saWorkplaces || []).find(w => w.id === id) : null;
+  S.saEditWpId = wp?.id || null;
+  document.getElementById('sa-wp-title').textContent = wp ? '🏢 Edit Workplace' : '🏢 New Workplace';
+  document.getElementById('sa-wp-name').value = wp?.name || '';
+  document.getElementById('sa-wp-address').value = wp?.work_address || '';
+  document.getElementById('sa-wp-hours').value = Number(wp?.hours_per_week) || 40;
+  document.getElementById('sa-wp-radius').value = Number(wp?.work_radius_m) || 150;
+  showOnly('m-sa-wp');
+}
+
+async function saveSaWorkplace() {
+  const name = document.getElementById('sa-wp-name').value.trim();
+  const address = document.getElementById('sa-wp-address').value.trim();
+  const hours = Number(document.getElementById('sa-wp-hours').value || 40);
+  const radius = Number(document.getElementById('sa-wp-radius').value || 150);
+  if (!name) { toast('Workplace name is required.', 'er'); return; }
+  if (!Number.isFinite(hours) || hours < 1 || hours > 168) { toast('Hours/week must be between 1 and 168.', 'er'); return; }
+  if (!Number.isFinite(radius) || radius < 25 || radius > 2000) { toast('Radius must be between 25 and 2000 meters.', 'er'); return; }
+
+  const btn = document.getElementById('sa-wp-save');
+  btn.disabled = true;
+
+  let workLat = null, workLng = null;
+  if (address) {
+    const existing = S.saEditWpId ? (S.saWorkplaces || []).find(w => w.id === S.saEditWpId) : null;
+    if (existing && (existing.work_address || '').trim() === address && existing.work_lat != null) {
+      workLat = existing.work_lat; workLng = existing.work_lng;
+    } else {
+      const geo = await geocodeAddress(address);
+      if (geo) { workLat = geo.lat; workLng = geo.lng; }
+      else toast('Address saved, but geocoding failed. Location checks will show Unknown until it succeeds.', 'inf');
+    }
+  }
+
+  const payload = {
+    name,
+    work_address: address || null,
+    work_lat: workLat,
+    work_lng: workLng,
+    work_radius_m: radius,
+    hours_per_week: hours,
+  };
+
+  let error;
+  if (S.saEditWpId) {
+    ({ error } = await sb.from('workplaces').update(payload).eq('id', S.saEditWpId));
+  } else {
+    ({ error } = await sb.from('workplaces').insert({ ...payload, admin_id: S.user.id }));
+  }
+  btn.disabled = false;
+  if (error) { toast(error.message, 'er'); return; }
+  closeModal();
+  toast(S.saEditWpId ? 'Workplace updated!' : 'Workplace created!', 'ok');
+  await loadSuperadminPage();
+}
+
+async function deleteSaWorkplace(id) {
+  const wp = (S.saWorkplaces || []).find(w => w.id === id);
+  if (!wp) return;
+  const count = S.saWorkplaceCounts?.[id] || 0;
+  if (!confirm(`Permanently delete "${wp.name}"? This removes its ${count} membership(s) plus all related time entries, projects, and time-off requests. This cannot be undone.`)) return;
+  const { error } = await sb.from('workplaces').delete().eq('id', id);
+  if (error) { toast(error.message, 'er'); return; }
+  toast('Workplace deleted.', 'ok');
+  await loadSuperadminPage();
+}
+
+function openSaMoveModal(memberId) {
+  const m = (S.saMembers || []).find(x => x.id === memberId);
+  if (!m) return;
+  S.saMoveMemberId = memberId;
+  const name = m.profile?.full_name || m.profile?.email || 'Member';
+  document.getElementById('sa-move-lbl').textContent = `Move ${name} to a different workplace.`;
+  const sel = document.getElementById('sa-move-target');
+  const options = (S.saWorkplaces || [])
+    .filter(w => w.id !== m.workplace_id)
+    .map(w => `<option value="${w.id}">${escHtml(w.name)}</option>`).join('');
+  sel.innerHTML = options || '<option value="">No other workplace available</option>';
+  showOnly('m-sa-move');
+}
+
+async function saveSaMove() {
+  const memberId = S.saMoveMemberId;
+  const target = document.getElementById('sa-move-target').value;
+  if (!memberId || !target) { toast('Pick a destination workplace.', 'er'); return; }
+  const m = (S.saMembers || []).find(x => x.id === memberId);
+  if (!m) return;
+  const dupe = (S.saMembers || []).some(x => x.user_id === m.user_id && x.workplace_id === target);
+  if (dupe) { toast('That member already belongs to the destination workplace.', 'er'); return; }
+  const { error } = await sb.from('workplace_members').update({ workplace_id: target }).eq('id', memberId);
+  if (error) { toast(error.message, 'er'); return; }
+  closeModal();
+  toast('Member moved.', 'ok');
+  await loadSuperadminPage();
+}
+
 function getBrowserLocation() {
   return new Promise(resolve => {
     if (!navigator.geolocation) return resolve(null);
@@ -3768,6 +4037,9 @@ function goto(page, updateHash = true) {
   if (page === 'admin' && document.getElementById('nav-admin').classList.contains('hidden')) {
     page = 'dashboard';
   }
+  if (page === 'superadmin' && document.getElementById('nav-superadmin').classList.contains('hidden')) {
+    page = 'dashboard';
+  }
 
   document.querySelectorAll('.page').forEach(p => p.classList.remove('on'));
   document.getElementById('page-'+page).classList.add('on');
@@ -3781,6 +4053,7 @@ function goto(page, updateHash = true) {
   if (page==='schedule') loadSchedulePlanner();
   if (page==='timeoff')  loadTimeOffRequests();
   if (page==='admin')    loadAdminPage();
+  if (page==='superadmin') loadSuperadminPage();
 }
 
 function openModal(id) {
