@@ -809,7 +809,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <tbody id="tb-adm-hrs"></tbody>
           </table>
         </div>
-        <p class="hint" style="margin:.8rem 0 0">“Expected” is each employee's weekly target prorated across the selected period, reduced by approved time off. A negative difference is how many hours they still need to make up.</p>
+        <p class="hint" style="margin:.8rem 0 0">“Expected” is each employee's weekly target prorated across the selected period. Time off does not lower it — employees are expected to make up any hours missed. A negative difference is how many hours they still need to make up.</p>
       </div>
 
       <div class="card sec">
@@ -3318,14 +3318,14 @@ async function loadAdminHoursAnalysis() {
 
     const targetWk    = Number(m.profile?.planned_hours_per_week) || S.workplace.hours_per_week || 40;
     const leaveDays   = countLeaveDays(leaveByUser[uid]);
-    const leaveCredit = leaveDays * (targetWk / 7);
-    const expected    = Math.max(0, targetWk * weeks - leaveCredit);
+    // Time off does NOT reduce expected hours — employees make up the time.
+    const expected    = targetWk * weeks;
     const diff        = worked - expected;
     const makeUp      = Math.max(0, -diff);
     const pct         = expected > 0 ? Math.min((worked / expected) * 100, 100) : (worked > 0 ? 100 : 0);
     return {
       uid, name: m.profile?.full_name || 'Unknown', email: m.profile?.email || '',
-      worked, targetWk, leaveDays, leaveCredit, expected, diff, makeUp, pct,
+      worked, targetWk, leaveDays, expected, diff, makeUp, pct,
     };
   }));
 
@@ -3359,7 +3359,7 @@ async function loadAdminHoursAnalysis() {
       ? '<span style="color:#22c55e">✓ On track</span>'
       : `<span style="color:#f59e0b">⚠ Make up ${r.makeUp.toFixed(1)}h</span>`;
     const leaveTxt = r.leaveDays > 0
-      ? `${r.leaveDays}d <span style="color:var(--muted)">(${r.leaveCredit.toFixed(1)}h)</span>`
+      ? `${r.leaveDays}d`
       : '<span style="color:var(--muted)">—</span>';
     return `<tr>
       <td style="font-weight:500;cursor:pointer" onclick='openAdminEmpHistory(${JSON.stringify(r.uid)},${JSON.stringify(r.name)},${JSON.stringify(r.email)})' title="View history">${escHtml(r.name)}
