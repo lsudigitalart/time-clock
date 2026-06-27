@@ -849,46 +849,26 @@ tr:hover td{background:rgba(255,255,255,.015)}
 
       <div class="card sec">
         <div class="card-title flex-center jb" style="margin-bottom:1rem">
-          <div class="flex-center gap2"><div class="card-dot"></div> Members</div>
+          <div class="flex-center gap2"><div class="card-dot"></div> Users &amp; Members</div>
           <div class="flex-center gap2">
-            <label class="lbl" style="margin:0">Workplace</label>
-            <select id="sa-member-filter" class="inp" style="width:auto" onchange="renderSaMembers()">
-              <option value="">All</option>
+            <select id="sa-member-filter" class="inp" style="width:auto" onchange="renderSaPeople()">
+              <option value="">All workplaces</option>
             </select>
+            <input type="text" id="sa-user-search" class="inp" style="width:auto;min-width:200px" placeholder="Search name or email" oninput="renderSaPeople()">
           </div>
         </div>
-        <p class="hint" style="margin:0 0 .9rem">Move a member to another workplace. Their time history stays attached to the original workplace.</p>
-        <div class="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th style="text-align:left">Name</th>
-                <th style="text-align:left">Role</th>
-                <th style="text-align:left">Workplace</th>
-                <th style="width:110px;text-align:center">Action</th>
-              </tr>
-            </thead>
-            <tbody id="tb-sa-members"><tr><td colspan="4"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No members</div></div></td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card sec">
-        <div class="card-title flex-center jb" style="margin-bottom:1rem">
-          <div class="flex-center gap2"><div class="card-dot"></div> Users &amp; Roles</div>
-          <input type="text" id="sa-user-search" class="inp" style="width:auto;min-width:200px" placeholder="Search name or email" oninput="renderSaUsers()">
-        </div>
-        <p class="hint" style="margin:0 0 .9rem">Set a user's account role. <strong>Superadmin</strong> = manage every workplace and all users. <strong>Admin</strong> = can run a workplace. <strong>Member</strong> = regular employee.</p>
+        <p class="hint" style="margin:0 0 .9rem">Set a user's account role and move their workplace memberships. <strong>Superadmin</strong> = manage every workplace and all users. <strong>Admin</strong> = can run a workplace. <strong>Member</strong> = regular employee. Moving a membership keeps past time history with the original workplace.</p>
         <div class="tbl-wrap">
           <table>
             <thead>
               <tr>
                 <th style="text-align:left">Name</th>
                 <th style="text-align:left">Email</th>
-                <th style="width:170px;text-align:left">Role</th>
+                <th style="width:170px;text-align:left">Account Role</th>
+                <th style="text-align:left">Workplaces</th>
               </tr>
             </thead>
-            <tbody id="tb-sa-users"><tr><td colspan="3"><div class="empty"><div class="empty-icon">🧑‍💼</div><div class="empty-txt">No users</div></div></td></tr></tbody>
+            <tbody id="tb-sa-people"><tr><td colspan="4"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No users</div></div></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -3681,8 +3661,7 @@ async function loadSuperadminPage() {
 
   renderSaWorkplaces();
   populateSaWorkplaceSelects();
-  renderSaMembers();
-  renderSaUsers();
+  renderSaPeople();
 }
 
 function renderSaWorkplaces() {
@@ -3708,58 +3687,57 @@ function renderSaWorkplaces() {
 function populateSaWorkplaceSelects() {
   const filter = document.getElementById('sa-member-filter');
   const current = filter.value;
-  filter.innerHTML = '<option value="">All</option>' +
+  filter.innerHTML = '<option value="">All workplaces</option>' +
     (S.saWorkplaces || []).map(w => `<option value="${w.id}">${escHtml(w.name)}</option>`).join('');
   filter.value = current;
-}
-
-function renderSaMembers() {
-  const tb = document.getElementById('tb-sa-members');
-  const filter = document.getElementById('sa-member-filter').value;
-  const wpName = {};
-  (S.saWorkplaces || []).forEach(w => { wpName[w.id] = w.name; });
-  let rows = (S.saMembers || []).slice();
-  if (filter) rows = rows.filter(m => m.workplace_id === filter);
-  if (!rows.length) {
-    tb.innerHTML = `<tr><td colspan="4"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No members</div></div></td></tr>`;
-    return;
-  }
-  rows.sort((a, b) => (a.profile?.full_name || '').localeCompare(b.profile?.full_name || ''));
-  tb.innerHTML = rows.map(m => `
-    <tr>
-      <td>${escHtml(m.profile?.full_name || m.profile?.email || 'Member')}</td>
-      <td>${m.role === 'admin' ? '👑 Admin' : '👤 Member'}</td>
-      <td>${escHtml(wpName[m.workplace_id] || '—')}</td>
-      <td style="text-align:center"><button class="btn btn-ghost btn-sm" onclick="openSaMoveModal('${m.id}')">Move</button></td>
-    </tr>`).join('');
 }
 
 function roleLabel(r) {
   return r === 'superadmin' ? 'Superadmin' : r === 'admin' ? 'Admin' : 'Member';
 }
 
-function renderSaUsers() {
-  const tb = document.getElementById('tb-sa-users');
+function renderSaPeople() {
+  const tb = document.getElementById('tb-sa-people');
+  const filter = document.getElementById('sa-member-filter').value;
   const q = (document.getElementById('sa-user-search').value || '').trim().toLowerCase();
+
+  const wpName = {};
+  (S.saWorkplaces || []).forEach(w => { wpName[w.id] = w.name; });
+
+  const byUser = {};
+  (S.saMembers || []).forEach(m => { (byUser[m.user_id] = byUser[m.user_id] || []).push(m); });
+
   let profs = (S.saProfiles || []).slice();
+  if (filter) profs = profs.filter(p => (byUser[p.id] || []).some(m => m.workplace_id === filter));
   if (q) profs = profs.filter(p =>
     (p.full_name || '').toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q));
+
   const rank = { superadmin: 0, admin: 1, user: 2 };
   profs.sort((a, b) =>
     (rank[a.role] ?? 3) - (rank[b.role] ?? 3) ||
     (a.full_name || '').localeCompare(b.full_name || ''));
+
   if (!profs.length) {
-    tb.innerHTML = `<tr><td colspan="3"><div class="empty"><div class="empty-icon">🧑‍💼</div><div class="empty-txt">No users</div></div></td></tr>`;
+    tb.innerHTML = `<tr><td colspan="4"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">No users</div></div></td></tr>`;
     return;
   }
+
   const roles = ['user', 'admin', 'superadmin'];
   tb.innerHTML = profs.map(p => {
     const isSelf = p.id === S.user.id;
     const opts = roles.map(r => `<option value="${r}"${p.role === r ? ' selected' : ''}>${roleLabel(r)}</option>`).join('');
+    const mems = byUser[p.id] || [];
+    const wpCell = mems.length
+      ? mems.map(m => `<div class="flex-center" style="justify-content:space-between;gap:.5rem;margin:.15rem 0">
+            <span>${m.role === 'admin' ? '👑' : '👤'} ${escHtml(wpName[m.workplace_id] || '—')}</span>
+            <button class="btn btn-ghost btn-sm" style="padding:.15rem .5rem;font-size:.78rem" onclick="openSaMoveModal('${m.id}')">Move</button>
+          </div>`).join('')
+      : '<span class="hint" style="display:inline-block">—</span>';
     return `<tr>
       <td>${escHtml(p.full_name || '—')}</td>
       <td>${escHtml(p.email || '—')}</td>
       <td><select class="inp" style="width:auto"${isSelf ? ' disabled' : ''} onchange="changeUserRole('${p.id}', this.value)">${opts}</select>${isSelf ? ' <span class="hint" style="display:inline-block;margin-left:.4rem">(you)</span>' : ''}</td>
+      <td>${wpCell}</td>
     </tr>`;
   }).join('');
 }
@@ -3771,14 +3749,14 @@ async function changeUserRole(userId, newRole) {
   const name = p.full_name || p.email || 'User';
   if (newRole === 'superadmin' &&
       !confirm(`Grant SUPERADMIN to ${name}? They will be able to manage every workplace and all user roles.`)) {
-    renderSaUsers();
+    renderSaPeople();
     return;
   }
   const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', userId);
-  if (error) { toast(error.message, 'er'); renderSaUsers(); return; }
+  if (error) { toast(error.message, 'er'); renderSaPeople(); return; }
   p.role = newRole;
   toast(`${name} is now ${roleLabel(newRole)}.`, 'ok');
-  renderSaUsers();
+  renderSaPeople();
 }
 
 function openSaWpModal(id) {
