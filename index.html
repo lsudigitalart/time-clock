@@ -589,7 +589,10 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div id="page-history" class="page">
       <div class="ph">
         <div><div class="ph-title">My History</div><div class="ph-sub">Your shifts and time off, all in one place</div></div>
-        <select id="hist-month" class="inp" style="width:auto;padding:.4rem 2.2rem .4rem .75rem" onchange="loadHistory()"></select>
+        <div class="flex-center gap2">
+          <button class="btn btn-primary btn-sm" onclick="openAddShiftModal()">+ Add Shift</button>
+          <select id="hist-month" class="inp" style="width:auto;padding:.4rem 2.2rem .4rem .75rem" onchange="loadHistory()"></select>
+        </div>
       </div>
       <div class="card">
         <div class="tbl-wrap"><table>
@@ -961,7 +964,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
   <!-- Edit Entry -->
   <div class="modal hidden" id="m-edit-entry">
     <button class="m-close" onclick="closeModal()">✕</button>
-    <div class="m-title">✏️ Edit Time Entry</div>
+    <div class="m-title" id="ee-title">✏️ Edit Time Entry</div>
     <input type="hidden" id="ee-id">
     <div class="frow">
       <div class="fld">
@@ -984,8 +987,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
     <div id="ee-err" class="err-msg"></div>
     <div class="m-footer">
+      <button class="btn btn-danger btn-sm" id="ee-delete" onclick="deleteEditEntry()" style="margin-right:auto">Delete</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveEditEntry()">Save Changes</button>
+      <button class="btn btn-primary" id="ee-save" onclick="saveEditEntry()">Save Changes</button>
     </div>
   </div>
 
@@ -2044,7 +2048,7 @@ async function loadHistory() {
         <td class="td-mono">${co ? fmtDur((co-ci)/3600000) : '—'}</td>
         <td>${renderEntryDetails(e)}</td>
         <td><span class="badge bb">Clock</span></td>
-        <td><button class="btn btn-ghost" style="padding:.2rem .6rem;font-size:.8rem" onclick="openEditEntryModal('${e.id}')">Edit</button></td>
+        <td><button class="btn btn-ghost" style="padding:.2rem .6rem;font-size:.8rem" onclick="openEditEntryModal('${e.id}')">Edit</button> <button class="btn btn-danger" style="padding:.2rem .6rem;font-size:.8rem" onclick="deleteHistoryEntry('${e.id}')">Delete</button></td>
       </tr>`;
     } else {
       const t = r.d;
@@ -2084,8 +2088,53 @@ async function openEditEntryModal(id) {
   document.getElementById('ee-notes').value = entry.notes || '';
   renderProjectSelect('ee-projects', entry.project_names || []);
   document.getElementById('ee-err').classList.remove('on');
-  document.getElementById('m-edit-entry').dataset.adminMode = '';
+  document.getElementById('ee-title').textContent = '✏️ Edit Time Entry';
+  document.getElementById('ee-save').textContent = 'Save Changes';
+  document.getElementById('ee-delete').style.display = '';
+  const modal = document.getElementById('m-edit-entry');
+  modal.dataset.adminMode = '';
+  modal.dataset.createMode = '';
   showOnly('m-edit-entry');
+}
+
+async function openAddShiftModal() {
+  if (!S.workplace?.id) { toast('Join a workplace before adding shifts.', 'er'); return; }
+  await loadWorkplaceProjects();
+  const toLocal = d => new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  document.getElementById('ee-id').value    = '';
+  document.getElementById('ee-in').value    = toLocal(new Date());
+  document.getElementById('ee-out').value   = '';
+  document.getElementById('ee-notes').value = '';
+  renderProjectSelect('ee-projects', []);
+  document.getElementById('ee-err').classList.remove('on');
+  document.getElementById('ee-title').textContent = '➕ Add Shift';
+  document.getElementById('ee-save').textContent = 'Add Shift';
+  document.getElementById('ee-delete').style.display = 'none';
+  const modal = document.getElementById('m-edit-entry');
+  modal.dataset.adminMode = '';
+  modal.dataset.createMode = '1';
+  showOnly('m-edit-entry');
+}
+
+async function deleteHistoryEntry(id) {
+  if (!confirm('Delete this shift? This cannot be undone.')) return;
+  await removeShift(id);
+}
+
+async function deleteEditEntry() {
+  const id = document.getElementById('ee-id').value;
+  if (!id) return;
+  if (!confirm('Delete this shift? This cannot be undone.')) return;
+  closeModal();
+  await removeShift(id);
+}
+
+async function removeShift(id) {
+  const { error } = await sb.from('time_entries').delete().eq('id', id).eq('user_id', S.user.id);
+  if (error) { toast(error.message, 'er'); return; }
+  toast('Shift deleted.', 'ok');
+  await loadHistory();
+  await Promise.all([loadWeekProgress(), loadTodayHours(), loadMonthHours()]);
 }
 
 function openAdminTimeOffModal() {
@@ -2654,20 +2703,27 @@ async function openAdminEditEntry(id) {
   document.getElementById('ee-notes').value = entry.notes || '';
   renderProjectSelect('ee-projects', entry.project_names || []);
   document.getElementById('ee-err').classList.remove('on');
+  document.getElementById('ee-title').textContent = '✏️ Edit Time Entry';
+  document.getElementById('ee-save').textContent = 'Save Changes';
+  document.getElementById('ee-delete').style.display = 'none';
   // Tag modal so save knows which flow to use
-  document.getElementById('m-edit-entry').dataset.adminMode = '1';
+  const modal = document.getElementById('m-edit-entry');
+  modal.dataset.adminMode = '1';
+  modal.dataset.createMode = '';
   showOnly('m-edit-entry');
 }
 
 async function saveEditEntry() {
   const errEl = document.getElementById('ee-err');
   errEl.classList.remove('on');
+  const modal  = document.getElementById('m-edit-entry');
   const id     = document.getElementById('ee-id').value;
   const inVal  = document.getElementById('ee-in').value;
   const outVal = document.getElementById('ee-out').value;
   const notes  = document.getElementById('ee-notes').value.trim() || null;
   const project_names = getSelectedProjectNames('ee-projects');
-  const adminMode = document.getElementById('m-edit-entry').dataset.adminMode === '1';
+  const adminMode  = modal.dataset.adminMode === '1';
+  const createMode = modal.dataset.createMode === '1';
 
   if (!inVal) { errEl.textContent = 'Clock-in time is required.'; errEl.classList.add('on'); return; }
   const clockIn  = new Date(inVal).toISOString();
@@ -2676,17 +2732,27 @@ async function saveEditEntry() {
     errEl.textContent = 'Clock-out must be after clock-in.'; errEl.classList.add('on'); return;
   }
 
-  let query = sb.from('time_entries').update({ clock_in: clockIn, clock_out: clockOut, notes, project_names }).eq('id', id);
-  if (!adminMode) query = query.eq('user_id', S.user.id);
+  let error;
+  if (createMode) {
+    if (!S.workplace?.id) { errEl.textContent = 'Join a workplace before adding shifts.'; errEl.classList.add('on'); return; }
+    ({ error } = await sb.from('time_entries').insert({
+      user_id: S.user.id, workplace_id: S.workplace.id,
+      clock_in: clockIn, clock_out: clockOut, notes, project_names,
+    }));
+  } else {
+    let query = sb.from('time_entries').update({ clock_in: clockIn, clock_out: clockOut, notes, project_names }).eq('id', id);
+    if (!adminMode) query = query.eq('user_id', S.user.id);
+    ({ error } = await query);
+  }
 
-  const { error } = await query;
   if (error) { errEl.textContent = error.message; errEl.classList.add('on'); return; }
 
   closeModal();
-  toast('Entry updated!', 'ok');
+  toast(createMode ? 'Shift added!' : 'Entry updated!', 'ok');
+  modal.dataset.createMode = '';
 
   if (adminMode) {
-    document.getElementById('m-edit-entry').dataset.adminMode = '';
+    modal.dataset.adminMode = '';
     // Re-open the employee history modal
     showOnly('m-adm-emp-hist');
     await loadAdminEmpHistory();
