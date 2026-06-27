@@ -869,6 +869,26 @@ tr:hover td{background:rgba(255,255,255,.015)}
           </table>
         </div>
       </div>
+
+      <div class="card sec">
+        <div class="card-title flex-center jb" style="margin-bottom:1rem">
+          <div class="flex-center gap2"><div class="card-dot"></div> Users &amp; Roles</div>
+          <input type="text" id="sa-user-search" class="inp" style="width:auto;min-width:200px" placeholder="Search name or email" oninput="renderSaUsers()">
+        </div>
+        <p class="hint" style="margin:0 0 .9rem">Set a user's account role. <strong>Superadmin</strong> = manage every workplace and all users. <strong>Admin</strong> = can run a workplace. <strong>Member</strong> = regular employee.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align:left">Name</th>
+                <th style="text-align:left">Email</th>
+                <th style="width:170px;text-align:left">Role</th>
+              </tr>
+            </thead>
+            <tbody id="tb-sa-users"><tr><td colspan="3"><div class="empty"><div class="empty-icon">🧑‍💼</div><div class="empty-txt">No users</div></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </main>
 </div>
@@ -3587,17 +3607,16 @@ async function loadSuperadminPage() {
   S.saMembers.forEach(m => { counts[m.workplace_id] = (counts[m.workplace_id] || 0) + 1; });
   S.saWorkplaceCounts = counts;
 
-  const ownerIds = [...new Set(S.saWorkplaces.map(w => w.admin_id).filter(Boolean))];
+  const { data: profiles } = await sb.from('profiles').select('id, full_name, email, role');
+  S.saProfiles = profiles || [];
   const owners = {};
-  if (ownerIds.length) {
-    const { data: profs } = await sb.from('profiles').select('id, full_name, email').in('id', ownerIds);
-    (profs || []).forEach(p => { owners[p.id] = p.full_name || p.email || '—'; });
-  }
+  S.saProfiles.forEach(p => { owners[p.id] = p.full_name || p.email || '—'; });
   S.saOwners = owners;
 
   renderSaWorkplaces();
   populateSaWorkplaceSelects();
   renderSaMembers();
+  renderSaUsers();
 }
 
 function renderSaWorkplaces() {
@@ -3647,6 +3666,53 @@ function renderSaMembers() {
       <td>${escHtml(wpName[m.workplace_id] || '—')}</td>
       <td style="text-align:center"><button class="btn btn-ghost btn-sm" onclick="openSaMoveModal('${m.id}')">Move</button></td>
     </tr>`).join('');
+}
+
+function roleLabel(r) {
+  return r === 'superadmin' ? 'Superadmin' : r === 'admin' ? 'Admin' : 'Member';
+}
+
+function renderSaUsers() {
+  const tb = document.getElementById('tb-sa-users');
+  const q = (document.getElementById('sa-user-search').value || '').trim().toLowerCase();
+  let profs = (S.saProfiles || []).slice();
+  if (q) profs = profs.filter(p =>
+    (p.full_name || '').toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q));
+  const rank = { superadmin: 0, admin: 1, user: 2 };
+  profs.sort((a, b) =>
+    (rank[a.role] ?? 3) - (rank[b.role] ?? 3) ||
+    (a.full_name || '').localeCompare(b.full_name || ''));
+  if (!profs.length) {
+    tb.innerHTML = `<tr><td colspan="3"><div class="empty"><div class="empty-icon">🧑‍💼</div><div class="empty-txt">No users</div></div></td></tr>`;
+    return;
+  }
+  const roles = ['user', 'admin', 'superadmin'];
+  tb.innerHTML = profs.map(p => {
+    const isSelf = p.id === S.user.id;
+    const opts = roles.map(r => `<option value="${r}"${p.role === r ? ' selected' : ''}>${roleLabel(r)}</option>`).join('');
+    return `<tr>
+      <td>${escHtml(p.full_name || '—')}</td>
+      <td>${escHtml(p.email || '—')}</td>
+      <td><select class="inp" style="width:auto"${isSelf ? ' disabled' : ''} onchange="changeUserRole('${p.id}', this.value)">${opts}</select>${isSelf ? ' <span class="hint" style="display:inline-block;margin-left:.4rem">(you)</span>' : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function changeUserRole(userId, newRole) {
+  if (!['user', 'admin', 'superadmin'].includes(newRole)) return;
+  const p = (S.saProfiles || []).find(x => x.id === userId);
+  if (!p) return;
+  const name = p.full_name || p.email || 'User';
+  if (newRole === 'superadmin' &&
+      !confirm(`Grant SUPERADMIN to ${name}? They will be able to manage every workplace and all user roles.`)) {
+    renderSaUsers();
+    return;
+  }
+  const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', userId);
+  if (error) { toast(error.message, 'er'); renderSaUsers(); return; }
+  p.role = newRole;
+  toast(`${name} is now ${roleLabel(newRole)}.`, 'ok');
+  renderSaUsers();
 }
 
 function openSaWpModal(id) {

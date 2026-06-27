@@ -207,6 +207,13 @@ CREATE POLICY "profiles: update own"
   TO authenticated
   USING (auth.uid() = id);
 
+-- Superadmins can update any profile, including the role column.
+CREATE POLICY "profiles: update by superadmin"
+  ON public.profiles FOR UPDATE
+  TO authenticated
+  USING (is_superadmin())
+  WITH CHECK (is_superadmin());
+
 
 -- ── workplaces ────────────────────────────────────────────────
 -- Allow anon SELECT so the sign-up page can list workplaces.
