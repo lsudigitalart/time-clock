@@ -769,6 +769,12 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <label class="lbl" style="margin:0">To</label>
             <input type="date" id="adm-hrs-to" class="inp" style="width:auto" onchange="loadAdminHoursAnalysis()">
           </div>
+          <div class="flex-center gap2">
+            <label class="lbl" style="margin:0">Group</label>
+            <select id="adm-hrs-group" class="inp" style="width:auto" onchange="setAdminHoursGroup(this.value)">
+              <option value="">All groups</option>
+            </select>
+          </div>
         </div>
         <div class="g3 mb2">
           <div style="padding:.9rem 1rem;background:var(--bg-elevated);border-radius:8px">
@@ -1327,6 +1333,7 @@ const S = {
   adminHoursWeekStart: null,  // Date (Mon) for single-week analysis; null = current week
   adminHoursSortCol: 'diff',  // hours analysis sort column
   adminHoursSortDir: 'asc',   // hours analysis sort direction
+  adminHoursFilterGroup: '',  // '' = all groups, otherwise only that group
   workplaceProjects: [],
   workplaceProjectsReady: false,
   planByDay: {},
@@ -3195,6 +3202,11 @@ function resetAdminHoursWeek() {
   loadAdminHoursAnalysis();
 }
 
+function setAdminHoursGroup(group) {
+  S.adminHoursFilterGroup = group || '';
+  loadAdminHoursAnalysis();
+}
+
 function toggleAdminHoursSort(col) {
   if (S.adminHoursSortCol === col) {
     S.adminHoursSortDir = S.adminHoursSortDir === 'asc' ? 'desc' : 'asc';
@@ -3245,6 +3257,29 @@ async function loadAdminHoursAnalysis() {
     return;
   }
 
+  // Populate the group filter dropdown with the available groups
+  const groups = [...new Set(members.map(m => m.group).filter(Boolean))].sort();
+  const groupSel = document.getElementById('adm-hrs-group');
+  if (groupSel) {
+    if (S.adminHoursFilterGroup && !groups.includes(S.adminHoursFilterGroup)) {
+      S.adminHoursFilterGroup = '';
+    }
+    groupSel.innerHTML = '<option value="">All groups</option>' +
+      groups.map(g => `<option value="${escHtml(g)}">${escHtml(g)}</option>`).join('');
+    groupSel.value = S.adminHoursFilterGroup || '';
+  }
+
+  // Apply the group filter
+  const visibleMembers = S.adminHoursFilterGroup
+    ? members.filter(m => (m.group || '') === S.adminHoursFilterGroup)
+    : members;
+
+  if (!visibleMembers.length) {
+    tb.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="empty-icon">🗂️</div><div class="empty-txt">No employees in this group.</div></div></td></tr>';
+    setSummary(0, 0, '0h');
+    return;
+  }
+
   const startKey = localDateKey(start);
   const endKey   = localDateKey(end);
 
@@ -3272,7 +3307,7 @@ async function loadAdminHoursAnalysis() {
     return set.size;
   };
 
-  const rows = await Promise.all(members.map(async m => {
+  const rows = await Promise.all(visibleMembers.map(async m => {
     const uid = m.profile?.id || m.user_id;
     const { data: entries } = await sb.from('time_entries').select('clock_in,clock_out')
       .eq('user_id', uid)
