@@ -2021,9 +2021,10 @@ async function loadWeekProgress() {
 }
 
 function weekRange() {
+  // Weeks run Sunday → Saturday
   const now = new Date(), day = now.getDay();
   const start = new Date(now);
-  start.setDate(now.getDate() + (day === 0 ? -6 : 1 - day));
+  start.setDate(now.getDate() - day);
   start.setHours(0,0,0,0);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
@@ -3214,7 +3215,10 @@ async function loadAdminHoursAnalysis() {
   document.getElementById('adm-hrs-range-ctrl')?.classList.toggle('hidden', weekMode);
 
   const { start, end } = adminHoursPeriod();
-  const days  = Math.round((end - start) / 86400000) + 1;
+  // Count whole calendar days inclusively (end is 23:59:59.999, so snap both to midnight)
+  const startMid = new Date(start); startMid.setHours(0, 0, 0, 0);
+  const endMid   = new Date(end);   endMid.setHours(0, 0, 0, 0);
+  const days  = Math.round((endMid - startMid) / 86400000) + 1;
   const weeks = days / 7;
 
   const lbl = document.getElementById('adm-hrs-week-lbl');
