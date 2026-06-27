@@ -1788,6 +1788,10 @@ async function startShiftImmediately() {
     atLocation = distM <= radiusM;
   }
 
+  // Auto-detect work mode from location: inside the geofence = in-person, outside = remote.
+  // If location/geofence can't be determined, default to in-person.
+  const workMode = atLocation === false ? 'remote' : 'in_person';
+
   const { data, error } = await sb.from('time_entries').insert({
     user_id: S.user.id,
     workplace_id: S.workplace?.id || null,
@@ -1795,7 +1799,7 @@ async function startShiftImmediately() {
     auto_clockout_at: null,
     notes: null,
     project_names: [],
-    work_mode: S.clockMode || 'in_person',
+    work_mode: workMode,
     clock_in_lat: geo?.lat ?? null,
     clock_in_lng: geo?.lng ?? null,
     clock_in_accuracy_m: geo?.accuracy ?? null,
@@ -1805,7 +1809,7 @@ async function startShiftImmediately() {
   if (error) { toast(error.message, 'er'); return; }
   S.entry = data;
   setClockInUI(data);
-  toast('Shift started!', 'ok');
+  toast(workMode === 'remote' ? 'Shift started — Remote (off-site)' : 'Shift started — In-person', 'ok');
   loadWeekProgress();
   showShiftDetailsInline();
 }
