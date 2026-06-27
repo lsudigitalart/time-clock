@@ -507,12 +507,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <div class="clock-digits" id="cl-digits">00:00:00</div>
           <div class="clock-sub">TIME TODAY</div>
           <div class="clock-since" id="cl-since"></div>
-          <div id="ci-mode-wrap" style="margin:.2rem 0 .6rem">
-            <div class="aco-tabs" style="gap:.5rem;justify-content:center">
-              <button type="button" class="aco-tab on" id="ci-mode-inperson" onclick="setClockMode('in_person',this)">🏢 In-person</button>
-              <button type="button" class="aco-tab" id="ci-mode-remote" onclick="setClockMode('remote',this)">🏠 Remote</button>
-            </div>
-          </div>
           <div class="clock-btns">
             <button class="btn btn-primary btn-lg" id="btn-in"  onclick="startShiftImmediately()">Start Shift</button>
             <button class="btn btn-secondary btn-lg hidden" id="btn-out" onclick="doClockOut()">End Shift</button>
