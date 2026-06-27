@@ -66,6 +66,10 @@ CREATE TABLE IF NOT EXISTS public.time_entries (
 ALTER TABLE public.time_entries
   ADD COLUMN IF NOT EXISTS project_names text[] NOT NULL DEFAULT '{}'::text[];
 
+-- Work mode: how the shift was worked ('in_person' | 'remote'); NULL = unknown.
+ALTER TABLE public.time_entries
+  ADD COLUMN IF NOT EXISTS work_mode text;
+
 CREATE TABLE IF NOT EXISTS public.workplace_projects (
   id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   workplace_id  uuid NOT NULL REFERENCES public.workplaces(id) ON DELETE CASCADE,

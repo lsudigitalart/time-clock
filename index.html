@@ -507,6 +507,12 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <div class="clock-digits" id="cl-digits">00:00:00</div>
           <div class="clock-sub">TIME TODAY</div>
           <div class="clock-since" id="cl-since"></div>
+          <div id="ci-mode-wrap" style="margin:.2rem 0 .6rem">
+            <div class="aco-tabs" style="gap:.5rem;justify-content:center">
+              <button type="button" class="aco-tab on" id="ci-mode-inperson" onclick="setClockMode('in_person',this)">🏢 In-person</button>
+              <button type="button" class="aco-tab" id="ci-mode-remote" onclick="setClockMode('remote',this)">🏠 Remote</button>
+            </div>
+          </div>
           <div class="clock-btns">
             <button class="btn btn-primary btn-lg" id="btn-in"  onclick="startShiftImmediately()">Start Shift</button>
             <button class="btn btn-secondary btn-lg hidden" id="btn-out" onclick="doClockOut()">End Shift</button>
@@ -551,6 +557,13 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <div id="shift-details-inline" class="card sec hidden">
         <div class="card-title" style="margin-bottom:1rem">Shift Details</div>
         <div class="fld mb1">
+          <label class="lbl">Work Mode</label>
+          <div class="aco-tabs" id="shift-mode-inline" style="gap:.5rem">
+            <button type="button" class="aco-tab on" data-mode="in_person" onclick="setShiftModeInline('in_person',this)" style="font-size:.8rem;padding:.4rem .6rem">🏢 In-person</button>
+            <button type="button" class="aco-tab" data-mode="remote" onclick="setShiftModeInline('remote',this)" style="font-size:.8rem;padding:.4rem .6rem">🏠 Remote</button>
+          </div>
+        </div>
+        <div class="fld mb1">
           <label class="lbl">Notes (optional)</label>
           <input type="text" id="shift-notes-inline" class="inp" placeholder="What are you working on?">
         </div>
@@ -561,7 +574,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
         </div>
         <div class="fld mb1">
           <label class="lbl">Auto End Time (optional)</label>
-          <div class="aco-tabs" style="gap:.5rem">
+          <div class="aco-tabs" id="aco-tabs-inline" style="gap:.5rem">
             <button type="button" class="aco-tab on" onclick="acoModeInline('none',this)" style="font-size:.8rem;padding:.4rem .6rem">None</button>
             <button type="button" class="aco-tab" onclick="acoModeInline('hours',this)" style="font-size:.8rem;padding:.4rem .6rem">After Hours</button>
             <button type="button" class="aco-tab" onclick="acoModeInline('time',this)" style="font-size:.8rem;padding:.4rem .6rem">At Time</button>
@@ -959,6 +972,13 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="fld">
       <label class="lbl">Notes</label>
       <input type="text" id="ee-notes" class="inp" placeholder="What were you working on?">
+    </div>
+    <div class="fld">
+      <label class="lbl">Work Mode</label>
+      <select id="ee-mode" class="inp">
+        <option value="in_person">🏢 In-person</option>
+        <option value="remote">🏠 Remote</option>
+      </select>
     </div>
     <div class="fld">
       <label class="lbl">Projects</label>
@@ -1621,6 +1641,7 @@ function setClockInUI(entry) {
   badge.innerHTML = '<div class="s-dot pulse"></div><span>Working</span>';
   document.getElementById('btn-in').classList.add('hidden');
   document.getElementById('btn-out').classList.remove('hidden');
+  document.getElementById('ci-mode-wrap')?.classList.add('hidden');
 
   const start = new Date(entry.clock_in);
   document.getElementById('cl-since').textContent = `Since ${fmtTime(start)}`;
@@ -1659,7 +1680,16 @@ function setClockOutUI() {
   document.getElementById('cl-since').textContent = '';
   document.getElementById('aco-strip').classList.remove('on');
   document.getElementById('shift-details-inline').classList.add('hidden');
+  setClockMode('in_person', document.getElementById('ci-mode-inperson'));
+  document.getElementById('ci-mode-wrap')?.classList.remove('hidden');
   clearInterval(S.clockTick); clearTimeout(S.acoTimer);
+}
+
+function setClockMode(mode, btn) {
+  S.clockMode = mode === 'remote' ? 'remote' : 'in_person';
+  const wrap = document.getElementById('ci-mode-wrap');
+  if (wrap) wrap.querySelectorAll('.aco-tab').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
 }
 
 /* ═══════════════════════════════════════════════
@@ -1703,6 +1733,7 @@ async function startShiftImmediately() {
     auto_clockout_at: null,
     notes: null,
     project_names: [],
+    work_mode: S.clockMode || 'in_person',
     clock_in_lat: geo?.lat ?? null,
     clock_in_lng: geo?.lng ?? null,
     clock_in_accuracy_m: geo?.accuracy ?? null,
@@ -1721,17 +1752,29 @@ async function showShiftDetailsInline() {
   await loadWorkplaceProjects();
   renderProjectSelect('shift-projects-inline', S.entry?.project_names || []);
   document.getElementById('shift-notes-inline').value = S.entry?.notes || '';
+  const mode = S.entry?.work_mode || S.clockMode || 'in_person';
+  setShiftModeInline(mode, document.querySelector(`#shift-mode-inline .aco-tab[data-mode="${mode}"]`));
   document.getElementById('shift-details-inline').classList.remove('hidden');
   // Default to "After Hours" with 8 hours pre-filled
-  const hoursBtn = document.querySelectorAll('#shift-details-inline .aco-tab')[1];
+  const hoursBtn = document.querySelectorAll('#aco-tabs-inline .aco-tab')[1];
   acoModeInline('hours', hoursBtn);
   const hoursInput = document.getElementById('aco-h-inline');
   if (hoursInput && !hoursInput.value) hoursInput.value = '8';
 }
 
+function setShiftModeInline(mode, btn) {
+  document.querySelectorAll('#shift-mode-inline .aco-tab').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+}
+
+function getShiftModeInline() {
+  const on = document.querySelector('#shift-mode-inline .aco-tab.on');
+  return on?.dataset.mode === 'remote' ? 'remote' : 'in_person';
+}
+
 function acoModeInline(mode, btn) {
   S.acoInlineMode = mode;
-  document.querySelectorAll('#shift-details-inline .aco-tab').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('#aco-tabs-inline .aco-tab').forEach(b => b.classList.remove('on'));
   if (btn) btn.classList.add('on');
   ['none','hours','time'].forEach(m => {
     document.getElementById('acp-' + m + '-inline').classList.toggle('on', m === mode);
@@ -1743,6 +1786,7 @@ async function saveShiftDetails() {
   
   const notes = document.getElementById('shift-notes-inline').value.trim() || null;
   const projects = getSelectedProjectNames('shift-projects-inline');
+  const workMode = getShiftModeInline();
   
   let autoAt = null;
   if (S.acoInlineMode === 'hours') {
@@ -1760,11 +1804,11 @@ async function saveShiftDetails() {
   }
 
   const { error } = await sb.from('time_entries')
-    .update({ notes, project_names: projects, auto_clockout_at: autoAt })
+    .update({ notes, project_names: projects, work_mode: workMode, auto_clockout_at: autoAt })
     .eq('id', S.entry.id);
 
   if (error) { toast(error.message, 'er'); return; }
-  S.entry = { ...S.entry, notes, project_names: projects, auto_clockout_at: autoAt };
+  S.entry = { ...S.entry, notes, project_names: projects, work_mode: workMode, auto_clockout_at: autoAt };
   
   if (autoAt) {
     const autoAtDate = new Date(autoAt);
@@ -1962,7 +2006,7 @@ async function loadRecentEntries() {
       <td class="td-mono">${fmtTime(ci)}</td>
       <td class="td-mono">${co ? fmtTime(co) : '—'}</td>
       <td class="td-mono">${dur}</td>
-      <td style="color:var(--text2)">${e.notes || '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="color:var(--text2)">${workModeBadge(e.work_mode)}${e.work_mode ? ' ' : ''}${e.notes || (e.work_mode ? '' : '<span style="color:var(--muted)">—</span>')}</td>
     </tr>`;
   }).join('');
 }
@@ -2066,6 +2110,7 @@ async function openEditEntryModal(id) {
   document.getElementById('ee-in').value    = toLocal(entry.clock_in);
   document.getElementById('ee-out').value   = entry.clock_out ? toLocal(entry.clock_out) : '';
   document.getElementById('ee-notes').value = entry.notes || '';
+  document.getElementById('ee-mode').value  = entry.work_mode || 'in_person';
   renderProjectSelect('ee-projects', entry.project_names || []);
   document.getElementById('ee-err').classList.remove('on');
   document.getElementById('ee-title').textContent = '✏️ Edit Time Entry';
@@ -2085,6 +2130,7 @@ async function openAddShiftModal() {
   document.getElementById('ee-in').value    = toLocal(new Date());
   document.getElementById('ee-out').value   = '';
   document.getElementById('ee-notes').value = '';
+  document.getElementById('ee-mode').value  = 'in_person';
   renderProjectSelect('ee-projects', []);
   document.getElementById('ee-err').classList.remove('on');
   document.getElementById('ee-title').textContent = '➕ Add Shift';
@@ -2681,6 +2727,7 @@ async function openAdminEditEntry(id) {
   document.getElementById('ee-in').value    = toLocal(entry.clock_in);
   document.getElementById('ee-out').value   = entry.clock_out ? toLocal(entry.clock_out) : '';
   document.getElementById('ee-notes').value = entry.notes || '';
+  document.getElementById('ee-mode').value  = entry.work_mode || 'in_person';
   renderProjectSelect('ee-projects', entry.project_names || []);
   document.getElementById('ee-err').classList.remove('on');
   document.getElementById('ee-title').textContent = '✏️ Edit Time Entry';
@@ -2702,6 +2749,7 @@ async function saveEditEntry() {
   const outVal = document.getElementById('ee-out').value;
   const notes  = document.getElementById('ee-notes').value.trim() || null;
   const project_names = getSelectedProjectNames('ee-projects');
+  const work_mode = document.getElementById('ee-mode').value || 'in_person';
   const adminMode  = modal.dataset.adminMode === '1';
   const createMode = modal.dataset.createMode === '1';
 
@@ -2717,10 +2765,10 @@ async function saveEditEntry() {
     if (!S.workplace?.id) { errEl.textContent = 'Join a workplace before adding shifts.'; errEl.classList.add('on'); return; }
     ({ error } = await sb.from('time_entries').insert({
       user_id: S.user.id, workplace_id: S.workplace.id,
-      clock_in: clockIn, clock_out: clockOut, notes, project_names,
+      clock_in: clockIn, clock_out: clockOut, notes, project_names, work_mode,
     }));
   } else {
-    let query = sb.from('time_entries').update({ clock_in: clockIn, clock_out: clockOut, notes, project_names }).eq('id', id);
+    let query = sb.from('time_entries').update({ clock_in: clockIn, clock_out: clockOut, notes, project_names, work_mode }).eq('id', id);
     if (!adminMode) query = query.eq('user_id', S.user.id);
     ({ error } = await query);
   }
@@ -2857,13 +2905,23 @@ async function removeAdminProject(id, name) {
   toast('Project removed.', 'ok');
 }
 
+function workModeBadge(mode) {
+  if (mode === 'remote') return '<span style="display:inline-block;font-size:.72rem;color:#a78bfa;padding:.15rem .4rem;background:var(--bg-elevated);border-radius:999px">🏠 Remote</span>';
+  if (mode === 'in_person') return '<span style="display:inline-block;font-size:.72rem;color:var(--accent);padding:.15rem .4rem;background:var(--bg-elevated);border-radius:999px">🏢 In-person</span>';
+  return '';
+}
+
 function renderEntryDetails(entry) {
   const projects = (entry?.project_names || []).filter(Boolean);
-  const projectHtml = projects.length
-    ? `<div style="display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:${entry?.notes ? '.35rem' : '0'}">${projects.map(name => `<span style="font-size:.72rem;color:var(--accent);padding:.15rem .4rem;background:var(--bg-elevated);border-radius:999px">${escHtml(name)}</span>`).join('')}</div>`
+  const modeBadge = workModeBadge(entry?.work_mode);
+  const chips = [];
+  if (modeBadge) chips.push(modeBadge);
+  projects.forEach(name => chips.push(`<span style="font-size:.72rem;color:var(--accent);padding:.15rem .4rem;background:var(--bg-elevated);border-radius:999px">${escHtml(name)}</span>`));
+  const chipsHtml = chips.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:${entry?.notes ? '.35rem' : '0'}">${chips.join('')}</div>`
     : '';
   const notesHtml = entry?.notes ? escHtml(entry.notes) : '<span style="color:var(--muted)">—</span>';
-  return `${projectHtml}<div>${notesHtml}</div>`;
+  return `${chipsHtml}<div>${notesHtml}</div>`;
 }
 
 async function loadAdminEmployees() {
