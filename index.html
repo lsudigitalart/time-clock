@@ -4415,24 +4415,16 @@ async function applyInviteFromUrl() {
   if (!invite) return;
   const inviteEl = document.getElementById('s-invite');
   if (inviteEl) inviteEl.value = invite;
-  
-  // If admin invite code (ends with :admin), select admin button; otherwise employee
-  const isAdminInvite = invite.endsWith(':admin');
-  const roleEl = isAdminInvite ? document.getElementById('r-admin') : document.getElementById('r-user');
+
+  // Both employee and co-admin invites use the "user" signup path. The ':admin'
+  // suffix on the invite code is what flags the new account as a co-admin and
+  // adds them to the EXISTING workplace. Selecting the admin role here would
+  // instead create a brand-new (empty) workplace, so always pick the user role.
+  const roleEl = document.getElementById('r-user');
   if (roleEl) roleEl.checked = true;
-  
+
   roleChange();
-  
-  // If admin invite, fetch and pre-populate workplace name
-  if (isAdminInvite) {
-    const wpId = invite.slice(0, -6); // Remove ':admin' suffix
-    const { data: wp } = await sb.from('workplaces').select('name').eq('id', wpId).maybeSingle();
-    if (wp) {
-      const wpNameEl = document.getElementById('s-wp-name');
-      if (wpNameEl) wpNameEl.value = wp.name;
-    }
-  }
-  
+
   authTab('signup');
 }
 
