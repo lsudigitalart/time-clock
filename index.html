@@ -3145,7 +3145,7 @@ async function loadAdminEmployees() {
       <input class="group-edit inp" data-member-id="${e.memberId}" value="${e.group ? escHtml(e.group) : ''}" placeholder="—" autocomplete="off" style="width:100%;font-size:.8rem;padding:.2rem .4rem" onfocus="showGroupDropdown(this)" oninput="filterGroupDropdown(this)" onblur="onGroupInputBlur(this)" onkeydown="handleGroupKeydown(event, this)">
     </td>
     <td style="text-align:right;padding:.3rem .5rem">${e.wh.toFixed(1)}h / <input class="target-hours-edit" data-user-id="${e.uid}" type="number" value="${e.target}" min="1" max="168" step="0.5" style="width:45px;font-size:.8rem;padding:.2rem .3rem;text-align:center" onblur="saveAdminEmployeeTargetHours(this)" onkeydown="handleTargetHoursKeydown(event, this)"></td>
-    <td style="text-align:center"><button class="btn btn-ghost btn-sm" style="padding:.25rem .5rem;font-size:.8rem" onclick="event.stopPropagation(); openAdminEmpHistory(${JSON.stringify(e.uid)},${JSON.stringify(e.name)},${JSON.stringify(e.email)})">View ›</button></td>
+    <td style="text-align:center"><button class="btn btn-ghost btn-sm" style="padding:.25rem .5rem;font-size:.8rem" onclick='event.stopPropagation(); openAdminEmpHistory(${JSON.stringify(e.uid)},${JSON.stringify(e.name)},${JSON.stringify(e.email)})'>View ›</button></td>
   </tr>`);
   document.getElementById('tb-adm-emp').innerHTML = rowsHtml.join('');
   syncAdminEmployeeSelectionUi();
