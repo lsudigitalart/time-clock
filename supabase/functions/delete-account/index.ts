@@ -32,49 +32,58 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceKey);
 
-    // If deleting someone else, caller must be an admin/owner of at least one
-    // workplace that also contains the target user.
+    // If deleting someone else, caller must either be a superadmin, or an
+    // admin/owner of at least one workplace that also contains the target user.
     if (!isSelf) {
-      const [callerOwned, callerAdminMemberships] = await Promise.all([
-        adminClient
-          .from('workplaces')
-          .select('id')
-          .eq('admin_id', caller.id),
-        adminClient
-          .from('workplace_members')
-          .select('workplace_id')
-          .eq('user_id', caller.id)
-          .eq('role', 'admin'),
-      ]);
+      // Superadmins can delete any account.
+      const { data: callerProfile } = await adminClient
+        .from('profiles')
+        .select('role')
+        .eq('id', caller.id)
+        .maybeSingle();
 
-      const callerAdminWorkplaceIds = new Set<string>([
-        ...((callerOwned.data || []).map((w: { id: string }) => w.id)),
-        ...((callerAdminMemberships.data || []).map((m: { workplace_id: string }) => m.workplace_id)),
-      ]);
+      if (callerProfile?.role !== 'superadmin') {
+        const [callerOwned, callerAdminMemberships] = await Promise.all([
+          adminClient
+            .from('workplaces')
+            .select('id')
+            .eq('admin_id', caller.id),
+          adminClient
+            .from('workplace_members')
+            .select('workplace_id')
+            .eq('user_id', caller.id)
+            .eq('role', 'admin'),
+        ]);
 
-      if (!callerAdminWorkplaceIds.size) {
-        return json({ error: 'Only admins can delete other accounts' }, 403);
-      }
+        const callerAdminWorkplaceIds = new Set<string>([
+          ...((callerOwned.data || []).map((w: { id: string }) => w.id)),
+          ...((callerAdminMemberships.data || []).map((m: { workplace_id: string }) => m.workplace_id)),
+        ]);
 
-      const [targetOwned, targetMemberships] = await Promise.all([
-        adminClient
-          .from('workplaces')
-          .select('id')
-          .eq('admin_id', targetId),
-        adminClient
-          .from('workplace_members')
-          .select('workplace_id')
-          .eq('user_id', targetId),
-      ]);
+        if (!callerAdminWorkplaceIds.size) {
+          return json({ error: 'Only admins can delete other accounts' }, 403);
+        }
 
-      const targetWorkplaceIds = new Set<string>([
-        ...((targetOwned.data || []).map((w: { id: string }) => w.id)),
-        ...((targetMemberships.data || []).map((m: { workplace_id: string }) => m.workplace_id)),
-      ]);
+        const [targetOwned, targetMemberships] = await Promise.all([
+          adminClient
+            .from('workplaces')
+            .select('id')
+            .eq('admin_id', targetId),
+          adminClient
+            .from('workplace_members')
+            .select('workplace_id')
+            .eq('user_id', targetId),
+        ]);
 
-      const sameWorkplace = [...targetWorkplaceIds].some((wid) => callerAdminWorkplaceIds.has(wid));
-      if (!sameWorkplace) {
-        return json({ error: 'Target user is not in your workplace' }, 403);
+        const targetWorkplaceIds = new Set<string>([
+          ...((targetOwned.data || []).map((w: { id: string }) => w.id)),
+          ...((targetMemberships.data || []).map((m: { workplace_id: string }) => m.workplace_id)),
+        ]);
+
+        const sameWorkplace = [...targetWorkplaceIds].some((wid) => callerAdminWorkplaceIds.has(wid));
+        if (!sameWorkplace) {
+          return json({ error: 'Target user is not in your workplace' }, 403);
+        }
       }
     }
 
