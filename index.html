@@ -1057,6 +1057,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="flex-center jb" style="margin-bottom:.25rem">
       <div class="m-title" id="adm-emp-hist-title" style="margin:0">Employee History</div>
       <div class="flex-center gap2">
+        <button class="btn btn-primary btn-sm" onclick="openAdminAddShift()">+ Shift</button>
         <button class="btn btn-primary btn-sm" onclick="openAdminTimeOffModal()">+ Time Off</button>
         <button class="btn btn-danger btn-sm" id="adm-emp-del-btn" onclick="adminDeleteEmployeeCurrent()">Delete Account</button>
       </div>
@@ -2808,6 +2809,35 @@ async function openAdminEditEntry(id) {
   showOnly('m-edit-entry');
 }
 
+async function openAdminAddShift() {
+  if (!AH.userId) { toast('Open an employee first.', 'er'); return; }
+  if (!S.workplace?.id) { toast('Workplace not loaded — please refresh.', 'er'); return; }
+  await loadWorkplaceProjects();
+  const toLocal = d => new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+
+  // Start in the month being viewed so the new shift lands in the list the admin is looking at
+  const now = new Date();
+  const [yr, mo] = (document.getElementById('adm-hist-month').value || '').split('-').map(Number);
+  const start = (yr && mo && (yr !== now.getFullYear() || mo !== now.getMonth() + 1))
+    ? new Date(yr, mo - 1, 1, 9, 0)
+    : now;
+
+  document.getElementById('ee-id').value    = '';
+  document.getElementById('ee-in').value    = toLocal(start);
+  document.getElementById('ee-out').value   = '';
+  document.getElementById('ee-notes').value = '';
+  document.getElementById('ee-mode').value  = 'in_person';
+  renderProjectSelect('ee-projects', []);
+  document.getElementById('ee-err').classList.remove('on');
+  document.getElementById('ee-title').textContent = `➕ Add Shift for ${AH.name}`;
+  document.getElementById('ee-save').textContent = 'Add Shift';
+  document.getElementById('ee-delete').style.display = 'none';
+  const modal = document.getElementById('m-edit-entry');
+  modal.dataset.adminMode  = '1';
+  modal.dataset.createMode = '1';
+  showOnly('m-edit-entry');
+}
+
 async function saveEditEntry() {
   const errEl = document.getElementById('ee-err');
   errEl.classList.remove('on');
@@ -2831,8 +2861,10 @@ async function saveEditEntry() {
   let error;
   if (createMode) {
     if (!S.workplace?.id) { errEl.textContent = 'Join a workplace before adding shifts.'; errEl.classList.add('on'); return; }
+    const targetUserId = adminMode ? AH.userId : S.user.id;
+    if (!targetUserId) { errEl.textContent = 'Employee not found — please reopen their history.'; errEl.classList.add('on'); return; }
     ({ error } = await sb.from('time_entries').insert({
-      user_id: S.user.id, workplace_id: S.workplace.id,
+      user_id: targetUserId, workplace_id: S.workplace.id,
       clock_in: clockIn, clock_out: clockOut, notes, project_names, work_mode,
     }));
   } else {

@@ -335,20 +335,29 @@ CREATE POLICY "time_entries: read own or workplace admin"
     )
   );
 
-CREATE POLICY "time_entries: insert own"
+-- Users log their own shifts; admins can log a shift for anyone in their workplace.
+CREATE POLICY "time_entries: insert own or workplace admin"
   ON public.time_entries FOR INSERT
   TO authenticated
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (
+    auth.uid() = user_id
+    OR (
+      is_workplace_admin(workplace_id)
+      AND EXISTS (
+        SELECT 1
+        FROM public.workplace_members m
+        WHERE m.workplace_id = public.time_entries.workplace_id
+          AND m.user_id = public.time_entries.user_id
+      )
+    )
+  );
 
 CREATE POLICY "time_entries: update own or workplace admin"
   ON public.time_entries FOR UPDATE
   TO authenticated
   USING (
     auth.uid() = user_id
-    OR EXISTS (
-      SELECT 1 FROM public.workplaces w
-      WHERE w.id = workplace_id AND w.admin_id = auth.uid()
-    )
+    OR is_workplace_admin(workplace_id)
   );
 
 CREATE POLICY "time_entries: delete own"
